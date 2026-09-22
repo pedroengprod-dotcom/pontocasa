@@ -68,7 +68,7 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <div style="display:flex;justify-content:space-between;align-items:center"><div><h1 class="title">Equipe</h1><div class="sub">Cadastre e configure.</div></div><button id="addEmp" class="secondary" style="width:auto">+ Adicionar</button></div>
 <div id="teamList"></div>
 <div id="editor" class="hidden">
-<div class="card"><h3 id="editorTitle">Novo empregado</h3><label>Nome</label><input id="eName"><label>Contato</label><input id="eContact"><label>Data de admissão</label><input id="eAdmission" type="date"><label>Função</label><input id="eRole" value="Empregada doméstica"><button id="saveEmp" class="primary" style="margin-top:12px">Salvar empregado</button></div>
+<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 id="editorTitle" style="margin:0">Dados do empregado</h3><button id="editEmployeeData" class="secondary" style="width:auto">Editar dados</button></div><label>Nome</label><input id="eName" disabled><label>CPF *</label><input id="eCpf" placeholder="000.000.000-00" inputmode="numeric" disabled><label>PIS (opcional)</label><input id="ePis" placeholder="000.00000.00-0" inputmode="numeric" disabled><label>Contato</label><input id="eContact" disabled><label>Data de admissão</label><input id="eAdmission" type="date" disabled><label>Função</label><input id="eRole" value="Empregada doméstica" disabled><div id="editActions" class="grid2 hidden" style="margin-top:12px"><button id="saveEmp" class="primary">Salvar alterações</button><button id="cancelEdit" class="secondary">Cancelar</button></div></div>
 
 <div class="card"><h3>Jornada dia a dia</h3><div id="scheduleEditor" class="days"></div><button id="saveSchedule" class="secondary" style="margin-top:10px">Salvar jornada</button></div>
 
@@ -90,7 +90,7 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <section id="erMore" class="screen">
 <h1 class="title">Mais</h1>
 <div class="pillbar"><button class="active" data-more="reports">Relatórios</button><button data-more="adjustments">Correções</button><button data-more="settings">Configurações</button></div>
-<div id="moreReports"><div class="card"><button id="csv" class="secondary">Exportar CSV</button></div><div class="tablewrap"><table><thead><tr><th>Empregado</th><th>Data</th><th>Tipo</th><th>Hora aparelho</th><th>Hora servidor</th><th>Status</th><th>Distância</th><th>Precisão</th><th>Foto</th><th>Mapa</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+<div id="moreReports"><div class="card"><div class="grid2"><button id="csv" class="secondary">Exportar CSV</button><button id="pdfFuture" class="secondary">PDF (versão definitiva)</button></div><div class="small muted" style="margin-top:8px">Na versão definitiva, o PDF terá espaço/fluxo para assinatura do empregador e do empregado.</div></div><div class="tablewrap"><table><thead><tr><th>Empregado</th><th>Data</th><th>Tipo</th><th>Hora aparelho</th><th>Hora servidor</th><th>Status</th><th>Distância</th><th>Precisão</th><th>Endereço estimado</th><th>Foto</th><th>Mapa</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 <div id="moreAdjustments" class="hidden"></div>
 <div id="moreSettings" class="hidden"><div class="card"><b>Protótipo local</b><div class="small muted">Dados ficam só neste navegador/aparelho. Não use dados reais.</div><button id="reset" class="secondary" style="margin-top:10px;color:var(--bad)">Apagar dados de teste</button></div></div>
 </section>
@@ -112,7 +112,7 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 </div>
 
 <script>
-const KEY='pontocasa-v03';
+const KEY='pontocasa-v04';
 const baseSched={
 0:{works:false,start:'',bs:'',be:'',end:''},
 1:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},
@@ -124,7 +124,7 @@ const baseSched={
 };
 
 let st=JSON.parse(localStorage.getItem(KEY)||'null')||{
-employees:[{id:'e1',name:'Maria',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],
+employees:[{id:'e1',name:'Maria',cpf:'000.000.000-00',pis:'',contact:'',admission:'',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],
 punches:[],adjustments:[]
 };
 
@@ -147,6 +147,7 @@ $('today').textContent=new Date().toLocaleDateString('pt-BR',{dateStyle:'full'})
 function dist(a,b,c,d){const R=6371000,p=Math.PI/180,x=Math.sin((c-a)*p/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin((d-b)*p/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
 function classify(l,w){if(!l)return{text:'Localização indisponível',d:null};if(l.acc>200)return{text:'Baixa precisão',d:w.lat==null?null:Math.round(dist(l.lat,l.lon,w.lat,w.lon))};if(w.lat==null)return{text:'Local ainda não configurado',d:null};const d=Math.round(dist(l.lat,l.lon,w.lat,w.lon));return{text:d<=w.radius?'Dentro do local de trabalho':'Fora do local de trabalho',d}}
 function inst(){let x=localStorage.getItem('pc-inst');if(!x){x=uid();localStorage.setItem('pc-inst',x)}return x}
+async function reverseGeocode(lat,lon){try{const u=`https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`;const r=await fetch(u,{headers:{'Accept-Language':'pt-BR'}});if(!r.ok)throw new Error();const j=await r.json();return j.display_name||'Endereço estimado indisponível'}catch(e){return 'Endereço estimado indisponível'}}
 
 function capturePunchLocation(){
   loc=null;
@@ -180,7 +181,7 @@ if(!photo){toast('Tire a foto obrigatória.');return}
 const last=st.punches.filter(x=>x.employeeId==='e1').sort((a,b)=>b.deviceTime.localeCompare(a.deviceTime))[0];
 if(last&&Date.now()-new Date(last.deviceTime).getTime()<120000&&!confirm('Você acabou de registrar um ponto. Registrar outro?'))return;
 const now=new Date(),w=st.employees[0].workplace,c=classify(loc,w);
-st.punches.push({id:uid(),employeeId:'e1',type:$('pType').value,deviceTime:now.toISOString(),serverTime:new Date().toISOString(),syncTime:new Date().toISOString(),lat:loc?.lat??null,lon:loc?.lon??null,accuracy:loc?.acc??null,distance:c.d,status:c.text,photo:photo,installationId:inst(),offline:!navigator.onLine,integrityId:uid()});
+st.punches.push({id:uid(),employeeId:'e1',type:$('pType').value,deviceTime:now.toISOString(),serverTime:new Date().toISOString(),syncTime:new Date().toISOString(),lat:loc?.lat??null,lon:loc?.lon??null,accuracy:loc?.acc??null,distance:c.d,status:c.text,addressEstimate:loc?.addressEstimate||'Endereço estimado indisponível',photo:photo,installationId:inst(),offline:!navigator.onLine,integrityId:uid()});
 save();photo=null;loc=null;$('camera').value='';$('preview').style.display='none';$('geoText').textContent='Ainda não capturada.';toast('Ponto registrado');show('empHome',document.querySelector('#empNav [data-go="empHome"]'))
 };
 
@@ -203,19 +204,19 @@ function renderEr(){
 $('teamToday').innerHTML=st.employees.map(e=>{const p=st.punches.filter(x=>x.employeeId===e.id).sort((a,b)=>b.deviceTime.localeCompare(a.deviceTime))[0];return `<div class="row"><button data-detail="${p?.id||''}"><b>${e.name}</b><div class="small muted">${p?p.type+' '+fmtT(p.deviceTime)+' · '+p.status:'Sem marcação'}</div></button><span>›</span></div>`}).join('');
 document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
 
-$('teamList').innerHTML=st.employees.map(e=>`<div class="row"><button data-edit="${e.id}"><b>${e.name}</b><div class="small muted">${e.role} · ${e.active?'Ativo':'Inativo'}</div></button><span>›</span></div>`).join('');
+$('teamList').innerHTML=st.employees.map(e=>`<div class="row"><button data-edit="${e.id}"><b>${e.name}</b><div class="small muted">CPF ${e.cpf||'não informado'} · ${e.role} · ${e.active?'Ativo':'Inativo'}</div></button><span>›</span></div>`).join('');
 document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editEmp(b.dataset.edit));
 
 $('calSummary').innerHTML=`<b>${st.punches.length} marcações registradas</b><div class="small muted">Visão mensal completa virá depois.</div>`;
 
-$('rows').innerHTML=st.punches.slice().reverse().map(p=>`<tr><td>${emp(p.employeeId)?.name||''}</td><td>${fmtD(p.deviceTime)}</td><td>${p.type}</td><td>${fmtT(p.deviceTime)}</td><td>${fmtT(p.serverTime)}</td><td>${p.status}</td><td>${p.distance??'—'}</td><td>${p.accuracy?Math.round(p.accuracy)+' m':'—'}</td><td>${p.photo?`<button data-photo="${p.id}">Ver</button>`:'—'}</td><td>${p.lat!=null?`<a target="_blank" href="https://maps.google.com/?q=${p.lat},${p.lon}">Abrir</a>`:'—'}</td></tr>`).join('');
+$('rows').innerHTML=st.punches.slice().reverse().map(p=>`<tr><td>${emp(p.employeeId)?.name||''}</td><td>${fmtD(p.deviceTime)}</td><td>${p.type}</td><td>${fmtT(p.deviceTime)}</td><td>${fmtT(p.serverTime)}</td><td>${p.status}</td><td>${p.distance??'—'}</td><td>${p.accuracy?Math.round(p.accuracy)+' m':'—'}</td><td style="white-space:normal;min-width:260px">${p.addressEstimate||'—'}</td><td>${p.photo?`<button data-photo="${p.id}">Ver</button>`:'—'}</td><td>${p.lat!=null?`<a target="_blank" href="https://maps.google.com/?q=${p.lat},${p.lon}">Abrir</a>`:'—'}</td></tr>`).join('');
 document.querySelectorAll('[data-photo]').forEach(b=>b.onclick=()=>showPhoto(b.dataset.photo));
 
 $('moreAdjustments').innerHTML=st.adjustments.map(a=>`<div class="card"><b>${emp(a.employeeId)?.name||''} · ${a.type} ${a.time}</b><div class="small muted">${a.reason}</div><div class="grid2" style="margin-top:8px"><button class="secondary" data-decide="${a.id}" data-status="Aprovado">Aprovar</button><button class="secondary" data-decide="${a.id}" data-status="Rejeitado">Rejeitar</button></div><div class="small muted" style="margin-top:6px">Status: ${a.status}</div></div>`).join('')||'<div class="card muted">Sem solicitações.</div>';
 document.querySelectorAll('[data-decide]').forEach(b=>b.onclick=()=>decide(b.dataset.decide,b.dataset.status))
 }
 
-function openDetail(id){const p=st.punches.find(x=>x.id===id);$('detail').classList.remove('hidden');$('detail').innerHTML=p?`<div><b>${emp(p.employeeId).name} · ${p.type}</b><div class="small muted">${fmtD(p.deviceTime)} · ${fmtT(p.deviceTime)}</div></div>${p.photo?`<button id="detailPhotoBtn" class="secondary" style="margin:10px 0">Ver foto</button>`:''}<div class="small"><b>Status:</b> ${p.status}<br><b>Distância:</b> ${p.distance??'—'} m<br><b>Precisão:</b> ${p.accuracy?Math.round(p.accuracy)+' m':'—'}<br><b>Hora aparelho:</b> ${fmtT(p.deviceTime)}<br><b>Hora servidor:</b> ${fmtT(p.serverTime)}<br><b>Offline:</b> ${p.offline?'Sim':'Não'}<br><b>ID:</b> ${p.integrityId}</div>`:'<b>Sem marcação ainda.</b>';if(p?.photo){$('detailPhotoBtn').onclick=()=>showPhoto(p.id)}}
+function openDetail(id){const p=st.punches.find(x=>x.id===id);$('detail').classList.remove('hidden');$('detail').innerHTML=p?`<div><b>${emp(p.employeeId).name} · ${p.type}</b><div class="small muted">${fmtD(p.deviceTime)} · ${fmtT(p.deviceTime)}</div></div>${p.photo?`<button id="detailPhotoBtn" class="secondary" style="margin:10px 0">Ver foto</button>`:''}<div class="small"><b>Status:</b> ${p.status}<br><b>Distância:</b> ${p.distance??'—'} m<br><b>Precisão:</b> ${p.accuracy?Math.round(p.accuracy)+' m':'—'}<br><b>Endereço estimado:</b> ${p.addressEstimate||'—'}<br><b>Hora aparelho:</b> ${fmtT(p.deviceTime)}<br><b>Hora servidor:</b> ${fmtT(p.serverTime)}<br><b>Offline:</b> ${p.offline?'Sim':'Não'}<br><b>ID:</b> ${p.integrityId}</div>`:'<b>Sem marcação ainda.</b>';if(p?.photo){$('detailPhotoBtn').onclick=()=>showPhoto(p.id)}}
 
 function showPhoto(id){const p=st.punches.find(x=>x.id===id);if(p?.photo){$('modalPhoto').src=p.photo;$('photoModal').classList.remove('hidden')}}
 $('closePhoto').onclick=()=>{$('photoModal').classList.add('hidden');$('modalPhoto').src=''};
@@ -225,13 +226,17 @@ function decide(id,status){const a=st.adjustments.find(x=>x.id===id);if(a){a.sta
 
 function schedHtml(s){return ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'].map((n,i)=>{const d=s[i]||baseSched[i];return `<div class="day" data-day="${i}"><div class="dayhead"><b>${n}</b><label style="margin:0;font-weight:500"><input class="works" type="checkbox" ${d.works?'checked':''}> Trabalha</label></div><div class="times"><input class="start" type="time" value="${d.start}"><input class="bs" type="time" value="${d.bs}"><input class="be" type="time" value="${d.be}"><input class="end" type="time" value="${d.end}"></div></div>`}).join('')}
 
-function editEmp(id){editing=id;const e=emp(id);$('editor').classList.remove('hidden');$('editorTitle').textContent='Configurar '+e.name;$('eName').value=e.name;$('eContact').value=e.contact||'';$('eAdmission').value=e.admission||'';$('eRole').value=e.role;$('wName').value=e.workplace.name;$('wAddress').value=e.workplace.address||'';$('radius').value=e.workplace.radius;$('radiusText').textContent=e.workplace.radius;$('coordText').textContent=e.workplace.lat!=null?'Lat '+e.workplace.lat.toFixed(6)+' · Lon '+e.workplace.lon.toFixed(6):'Coordenadas ainda não definidas';$('scheduleEditor').innerHTML=schedHtml(e.schedule);$('addressResults').innerHTML='';$('editor').scrollIntoView({behavior:'smooth'})}
+function editEmp(id){editing=id;const e=emp(id);$('editor').classList.remove('hidden');$('editorTitle').textContent='Configurar '+e.name;$('eName').value=e.name;$('eCpf').value=e.cpf||'';$('ePis').value=e.pis||'';$('eContact').value=e.contact||'';$('eAdmission').value=e.admission||'';$('eRole').value=e.role;$('wName').value=e.workplace.name;$('wAddress').value=e.workplace.address||'';$('radius').value=e.workplace.radius;$('radiusText').textContent=e.workplace.radius;$('coordText').textContent=e.workplace.lat!=null?'Lat '+e.workplace.lat.toFixed(6)+' · Lon '+e.workplace.lon.toFixed(6):'Coordenadas ainda não definidas';$('scheduleEditor').innerHTML=schedHtml(e.schedule);$('addressResults').innerHTML='';setEmployeeFieldsEnabled(false);$('editor').scrollIntoView({behavior:'smooth'})}
 
-$('addEmp').onclick=()=>{editing=null;$('editor').classList.remove('hidden');$('editorTitle').textContent='Novo empregado';$('eName').value='';$('eContact').value='';$('eAdmission').value='';$('eRole').value='Empregada doméstica';$('scheduleEditor').innerHTML=schedHtml(baseSched);$('coordText').textContent='Coordenadas ainda não definidas';$('wAddress').value='';$('addressResults').innerHTML='';$('editor').scrollIntoView({behavior:'smooth'})};
+$('addEmp').onclick=()=>{editing=null;$('editor').classList.remove('hidden');$('editorTitle').textContent='Novo empregado';$('eName').value='';$('eCpf').value='';$('ePis').value='';$('eContact').value='';$('eAdmission').value='';$('eRole').value='Empregada doméstica';$('scheduleEditor').innerHTML=schedHtml(baseSched);$('coordText').textContent='Coordenadas ainda não definidas';$('wAddress').value='';$('addressResults').innerHTML='';setEmployeeFieldsEnabled(false);$('editor').scrollIntoView({behavior:'smooth'})};
 $('closeEditor').onclick=()=>$('editor').classList.add('hidden');
 
-$('saveEmp').onclick=()=>{let e=editing?emp(editing):null;if(!e){e={id:uid(),active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}};st.employees.push(e);editing=e.id}e.name=$('eName').value||'Sem nome';e.contact=$('eContact').value;e.admission=$('eAdmission').value;e.role=$('eRole').value;save();render();toast('Empregado salvo')};
-
+function setEmployeeFieldsEnabled(enabled){['eName','eCpf','ePis','eContact','eAdmission','eRole'].forEach(id=>$(id).disabled=!enabled);$('editActions').classList.toggle('hidden',!enabled);$('editEmployeeData').classList.toggle('hidden',enabled)}
+function normalizeDigits(s){return (s||'').replace(/\D/g,'')}
+let originalEmployeeSnapshot=null;
+$('editEmployeeData').onclick=()=>{const e=emp(editing);originalEmployeeSnapshot=JSON.stringify({name:e.name,cpf:e.cpf||'',pis:e.pis||'',contact:e.contact||'',admission:e.admission||'',role:e.role});setEmployeeFieldsEnabled(true)};
+$('cancelEdit').onclick=()=>{if(editing)editEmp(editing);else $('editor').classList.add('hidden')};
+$('saveEmp').onclick=()=>{const newData={name:$('eName').value.trim(),cpf:$('eCpf').value.trim(),pis:$('ePis').value.trim(),contact:$('eContact').value.trim(),admission:$('eAdmission').value,role:$('eRole').value.trim()};if(!newData.name){toast('Informe o nome.');return}if(normalizeDigits(newData.cpf).length!==11){toast('CPF é obrigatório e deve ter 11 dígitos.');return}let e=editing?emp(editing):null;if(!e){if(!confirm(`Tem certeza que deseja cadastrar ${newData.name} com CPF ${newData.cpf}?`))return;e={id:uid(),active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}};st.employees.push(e);editing=e.id}else{const before=originalEmployeeSnapshot?JSON.parse(originalEmployeeSnapshot):{name:e.name,cpf:e.cpf||'',pis:e.pis||'',contact:e.contact||'',admission:e.admission||'',role:e.role};const labels={name:'Nome',cpf:'CPF',pis:'PIS',contact:'Contato',admission:'Data de admissão',role:'Função'};const changed=Object.keys(newData).filter(k=>(before[k]||'')!==(newData[k]||'')).map(k=>labels[k]);if(!changed.length){toast('Nenhuma alteração identificada.');setEmployeeFieldsEnabled(false);return}if(!confirm(`Tem certeza que deseja ajustar ${changed.join(', ')}?`))return}Object.assign(e,newData);save();originalEmployeeSnapshot=null;setEmployeeFieldsEnabled(false);render();toast('Dados salvos')};
 $('saveSchedule').onclick=()=>{const e=emp(editing);if(!e){toast('Salve o empregado primeiro');return}document.querySelectorAll('#scheduleEditor .day').forEach(r=>e.schedule[r.dataset.day]={works:r.querySelector('.works').checked,start:r.querySelector('.start').value,bs:r.querySelector('.bs').value,be:r.querySelector('.be').value,end:r.querySelector('.end').value});save();toast('Jornada salva')};
 
 $('radius').oninput=e=>$('radiusText').textContent=e.target.value;
@@ -271,9 +276,9 @@ $('saveWork').onclick=()=>{const e=emp(editing);if(!e){toast('Salve o empregado 
 
 document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-more]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['Reports','Adjustments','Settings'].forEach(x=>$('more'+x).classList.add('hidden'));$('more'+b.dataset.more[0].toUpperCase()+b.dataset.more.slice(1)).classList.remove('hidden')});
 
-$('csv').onclick=()=>{const rows=[['Empregado','Data','Tipo','Hora aparelho','Hora servidor','Status','Distância m','Precisão m','Latitude','Longitude','Offline','Integridade']];st.punches.forEach(p=>rows.push([emp(p.employeeId)?.name,fmtD(p.deviceTime),p.type,p.deviceTime,p.serverTime,p.status,p.distance??'',p.accuracy??'',p.lat??'',p.lon??'',p.offline,p.integrityId]));const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pontocasa.csv';a.click();URL.revokeObjectURL(a.href)};
+$('csv').onclick=()=>{const rows=[['Empregado','CPF','Data','Tipo','Hora aparelho','Hora servidor','Status','Distância m','Precisão m','Endereço estimado','Latitude','Longitude','Offline','Integridade']];st.punches.forEach(p=>rows.push([emp(p.employeeId)?.name,emp(p.employeeId)?.cpf,fmtD(p.deviceTime),p.type,p.deviceTime,p.serverTime,p.status,p.distance??'',p.accuracy??'',p.addressEstimate||'',p.lat??'',p.lon??'',p.offline,p.integrityId]));const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pontocasa.csv';a.click();URL.revokeObjectURL(a.href)};
 
-$('reset').onclick=()=>{if(confirm('Apagar dados de teste?')){localStorage.removeItem(KEY);location.reload()}};
+$('pdfFuture').onclick=()=>toast('PDF com assinaturas entra na versão definitiva.');$('reset').onclick=()=>{if(confirm('Apagar dados de teste?')){localStorage.removeItem(KEY);location.reload()}};
 
 function render(){renderEmp();renderEr()}
 render();
