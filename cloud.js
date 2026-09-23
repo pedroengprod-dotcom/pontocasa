@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.8';
+const VERSION='0.9';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -98,7 +98,6 @@ document.body.appendChild(overlay);
 
 account.onclick=()=>overlay.classList.remove('hidden');
 document.getElementById('accessGateLogin').onclick=()=>{accessGate.classList.add('hidden');overlay.classList.remove('hidden')};
-document.getElementById('accessGateLogin').onclick=()=>overlay.classList.remove('hidden');
 document.getElementById('cloudClose').onclick=async()=>{
   overlay.classList.add('hidden');
   const {data:{session}}=await sb.auth.getSession();
@@ -502,8 +501,110 @@ async function loadEmployeeForCurrentUser(){
   if(greeting) greeting.textContent='Olá, '+local.name.split(' ')[0];
 
   render();
+  if(navigator.onLine) await syncOfflineQueue(false);
+  await loadPunchesForCurrentEmployee();
+  await loadCorrectionsForCurrentEmployee();
 }
 
+
+const OFFLINE_DB='pontocasa-offline-v1';
+const OFFLINE_STORE='pending_punches';
+
+function openOfflineDb(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(OFFLINE_DB,1);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(OFFLINE_STORE)) db.createObjectStore(OFFLINE_STORE,{keyPath:'id'});
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function offlinePut(item){
+  const db=await openOfflineDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(OFFLINE_STORE,'readwrite');
+    tx.objectStore(OFFLINE_STORE).put(item);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function offlineAll(){
+  const db=await openOfflineDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(OFFLINE_STORE,'readonly');
+    const req=tx.objectStore(OFFLINE_STORE).getAll();
+    req.onsuccess=()=>resolve(req.result||[]);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function offlineDelete(id){
+  const db=await openOfflineDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(OFFLINE_STORE,'readwrite');
+    tx.objectStore(OFFLINE_STORE).delete(id);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function queueOfflinePunch(){
+  if(!photo){toast('Tire a foto obrigatória.');return}
+  const employee=st.employees[0], w=employee.workplace, c=classify(loc,w);
+  const punchId=crypto.randomUUID(), now=new Date();
+  const ext=(photo.match(/^data:image\/(png|webp)/)||[])[1]||'jpeg';
+  const path=`${householdId}/${currentEmployeeCloudId}/${punchId}.${ext==='jpeg'?'jpg':ext}`;
+  const payload={
+    id:punchId,household_id:householdId,employee_id:currentEmployeeCloudId,
+    punch_type:document.getElementById('pType').value,device_time:now.toISOString(),
+    latitude:loc?.lat??null,longitude:loc?.lon??null,accuracy_m:loc?.acc??null,
+    distance_to_workplace_m:c.d,location_status:c.text,
+    estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
+    photo_path:path,installation_id:inst(),app_version:'0.9',
+    platform:navigator.userAgent.slice(0,500),was_offline:true,
+    offline_captured_at:now.toISOString()
+  };
+  await offlinePut({id:punchId,payload,photoDataUrl:photo,createdAt:now.toISOString()});
+  st.punches.push({
+    id:punchId,employeeId:'e1',type:payload.punch_type,deviceTime:payload.device_time,
+    serverTime:null,syncTime:null,lat:payload.latitude,lon:payload.longitude,
+    accuracy:payload.accuracy_m,distance:payload.distance_to_workplace_m,status:payload.location_status,
+    addressEstimate:payload.estimated_address,photo:photo,cloudPhotoPath:null,
+    installationId:payload.installation_id,offline:true,pendingSync:true,
+    integrityId:'Aguardando sincronização'
+  });
+  save();
+  photo=null;loc=null;
+  document.getElementById('camera').value='';
+  document.getElementById('preview').style.display='none';
+  document.getElementById('geoText').textContent='Ainda não capturada.';
+  toast('Ponto salvo offline. Será sincronizado quando a internet voltar.');
+  show('empHome',document.querySelector('#empNav [data-go="empHome"]'));
+}
+async function syncOfflineQueue(showMessage=true){
+  if(!navigator.onLine || currentRole!=='employee' || !currentEmployeeCloudId)return 0;
+  const items=(await offlineAll()).filter(x=>x.payload?.employee_id===currentEmployeeCloudId);
+  if(!items.length)return 0;
+  let synced=0;
+  for(const item of items){
+    try{
+      const blob=dataUrlToBlob(item.photoDataUrl);
+      const {error:upErr}=await sb.storage.from('punch-photos').upload(item.payload.photo_path,blob,{contentType:blob.type||'image/jpeg',upsert:false});
+      if(upErr && !String(upErr.message||'').toLowerCase().includes('exist'))throw upErr;
+
+      const {data,error}=await sb.from('punches').insert(item.payload).select('*').single();
+      if(error && !(String(error.code)==='23505'||String(error.message||'').toLowerCase().includes('duplicate')))throw error;
+
+      await offlineDelete(item.id);
+      synced++;
+    }catch(e){console.error('Falha ao sincronizar ponto offline',item.id,e)}
+  }
+  if(synced){
+    await loadPunchesForCurrentEmployee();
+    if(showMessage)toast(synced===1?'1 ponto offline sincronizado.':synced+' pontos offline sincronizados.');
+  }
+  return synced;
+}
 
 function dataUrlToBlob(dataUrl){
   const parts=dataUrl.split(',');
@@ -573,6 +674,7 @@ async function loadEmployerCloudData(){
   st.punches=(punchRows||[]).map(p=>cloudPunchToLocal(p,byCloud.get(p.employee_id)||p.employee_id));
   save();
   render();
+  await loadEmployerCorrections();
 }
 
 async function saveCloudPunch(){
@@ -581,7 +683,7 @@ async function saveCloudPunch(){
     return;
   }
   if(!navigator.onLine){
-    toast('Sem conexão. Sincronização offline entra na próxima etapa.');
+    await queueOfflinePunch();
     return;
   }
   if(!photo){toast('Tire a foto obrigatória.');return}
@@ -624,7 +726,7 @@ async function saveCloudPunch(){
       estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
       photo_path:path,
       installation_id:inst(),
-      app_version:'0.8',
+      app_version:'0.9',
       platform:navigator.userAgent.slice(0,500),
       was_offline:false
     };
@@ -669,6 +771,66 @@ window.showPhoto=async function(id){
 };
 
 document.getElementById('savePunch').onclick=saveCloudPunch;
+
+
+function correctionToLocal(a,localEmployeeId){
+  return {
+    id:a.id,employeeId:localEmployeeId,type:a.requested_type,
+    time:new Date(a.requested_time).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+    requestedTime:a.requested_time,reason:a.reason,note:a.note||'',
+    status:a.status,createdAt:a.requested_at,decidedAt:a.decided_at||null
+  };
+}
+async function loadCorrectionsForCurrentEmployee(){
+  if(!currentEmployeeCloudId)return;
+  const {data,error}=await sb.from('correction_requests').select('*')
+    .eq('employee_id',currentEmployeeCloudId).order('requested_at',{ascending:false});
+  if(error)throw error;
+  st.adjustments=(data||[]).map(a=>correctionToLocal(a,'e1'));
+  save();render();
+}
+async function loadEmployerCorrections(){
+  if(!(currentRole==='owner'||currentRole==='admin')||!householdId)return;
+  const {data,error}=await sb.from('correction_requests').select('*')
+    .eq('household_id',householdId).order('requested_at',{ascending:false});
+  if(error)throw error;
+  const byCloud=new Map(st.employees.map(e=>[e.cloudId,e.id]));
+  st.adjustments=(data||[]).map(a=>correctionToLocal(a,byCloud.get(a.employee_id)||a.employee_id));
+  save();render();
+}
+window.pcSendAdjustment=async function(){
+  if(currentRole!=='employee'||!currentEmployeeCloudId){toast('Entre como empregado.');return}
+  if(!navigator.onLine){toast('Solicitações de ajuste precisam de internet nesta versão.');return}
+  const date=document.getElementById('aDate')?.value||new Date().toISOString().slice(0,10);
+  const time=document.getElementById('aTime').value;
+  const requested=new Date(date+'T'+time+':00');
+  if(Number.isNaN(requested.getTime())){toast('Informe data e horário válidos.');return}
+  try{
+    const {error}=await sb.from('correction_requests').insert({
+      household_id:householdId,employee_id:currentEmployeeCloudId,
+      requested_type:document.getElementById('aType').value,
+      requested_time:requested.toISOString(),
+      reason:document.getElementById('aReason').value,
+      note:document.getElementById('aNote').value||null
+    });
+    if(error)throw error;
+    document.getElementById('aNote').value='';
+    await loadCorrectionsForCurrentEmployee();
+    toast('Solicitação enviada');
+  }catch(e){console.error(e);alert('Não foi possível enviar a solicitação: '+e.message)}
+};
+window.pcDecideAdjustment=async function(id,status){
+  if(!(currentRole==='owner'||currentRole==='admin')){toast('Ação não autorizada.');return}
+  if(!navigator.onLine){toast('Conecte-se à internet para decidir a solicitação.');return}
+  try{
+    const {error}=await sb.from('correction_requests').update({
+      status,decided_at:new Date().toISOString(),decided_by_user_id:currentSession.user.id
+    }).eq('id',id);
+    if(error)throw error;
+    await loadEmployerCorrections();
+    toast(status);
+  }catch(e){console.error(e);alert('Não foi possível atualizar a solicitação: '+e.message)}
+};
 
 async function generateInviteForEmployee(localEmployee){
   if(!currentSession) throw new Error('Entre na conta do empregador primeiro.');
@@ -837,6 +999,12 @@ sb.auth.onAuthStateChange(async()=>{
     return;
   }
   await refreshAuth();
+});
+window.addEventListener('online',async()=>{
+  try{
+    if(currentRole==='employee')await syncOfflineQueue(true);
+    else if(currentRole==='owner'||currentRole==='admin')await loadEmployerCloudData();
+  }catch(e){console.error(e)}
 });
 gate('Verificando acesso...',false);
 refreshAuth();
