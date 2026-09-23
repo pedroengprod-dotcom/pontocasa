@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.9.3</title>
+<title>PontoCasa v0.9.4</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -142,6 +142,8 @@ const baseSched={0:{works:false,start:'',bs:'',be:'',end:''},1:{works:true,start
 let st=JSON.parse(localStorage.getItem(KEY)||'null')||{employees:[{id:'e1',name:'Maria',cpf:'000.000.000-00',pis:'',contact:'',admission:'',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],punches:[],adjustments:[]};
 let photo=null,loc=null,editing='e1',employeeSnapshot=null,scheduleSnapshot=null,workSnapshot=null,reportRange={from:null,to:null};
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(st)),uid=()=>crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random(),fmtT=s=>new Date(s).toLocaleTimeString('pt-BR'),fmtD=s=>new Date(s).toLocaleDateString('pt-BR');
+function fmtDateTimeLocal(s){if(!s)return'';const d=new Date(s);return d.toLocaleString('pt-BR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}
+function tzName(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'Horário local'}catch(e){return'Horário local'}}
 function toast(m){$('toast').textContent=m;$('toast').style.display='block';setTimeout(()=>{$('toast').style.display='none'},1800)}
 function show(id,b){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');if(id==='empPunch')capturePunchLocation();render()}
 function role(emp){$('rEmp').classList.toggle('active',emp);$('rEr').classList.toggle('active',!emp);$('empNav').classList.toggle('hidden',!emp);$('erNav').classList.toggle('hidden',emp);show(emp?'empHome':'erToday',document.querySelector(emp?'#empNav button':'#erNav button'))}
@@ -386,14 +388,19 @@ try{
   });
   entries.sort((a,b)=>new Date(b.effectiveTime)-new Date(a.effectiveTime));
 
-  const rows=[['Empregado','CPF','Situação','Data considerada','Tipo considerado','Horário considerado','Registro original','Correção aprovada','Hora servidor','Status localização','Distância m','Precisão m','Endereço estimado','Latitude','Longitude','Offline','Integridade']];
+  const rows=[['Empregado','CPF','Situação','Data considerada','Tipo considerado','Horário considerado (local)','Fuso local','Registro original (local)','Correção aprovada (local)','Hora servidor (local)','Horário considerado UTC','Registro original UTC','Correção aprovada UTC','Hora servidor UTC','Status localização','Distância m','Precisão m','Endereço estimado','Latitude','Longitude','Offline','Integridade']];
   entries.forEach(x=>{
     const e=emp(x.employeeId),p=x.original,c=x.correction;
     rows.push([
-      e?.name||'',e?.cpf||'',x.kind,fmtD(x.effectiveTime),x.effectiveType,x.effectiveTime,
+      e?.name||'',e?.cpf||'',x.kind,fmtD(x.effectiveTime),x.effectiveType,fmtDateTimeLocal(x.effectiveTime),tzName(),
+      p?`${p.type} | ${fmtDateTimeLocal(p.deviceTime)}`:'',
+      c?`${c.type} | ${fmtDateTimeLocal(c.requestedTime)} | ${c.reason}`:'',
+      p?.serverTime?fmtDateTimeLocal(p.serverTime):'',
+      x.effectiveTime||'',
       p?`${p.type} | ${p.deviceTime}`:'',
       c?`${c.type} | ${c.requestedTime} | ${c.reason}`:'',
-      p?.serverTime||'',p?.status||'Não se aplica',p?.distance??'',p?.accuracy??'',
+      p?.serverTime||'',
+      p?.status||'Não se aplica',p?.distance??'',p?.accuracy??'',
       p?.addressEstimate||'',p?.lat??'',p?.lon??'',p?.offline??'',p?.integrityId||''
     ]);
   });
