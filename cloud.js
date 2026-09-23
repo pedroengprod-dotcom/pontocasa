@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.9';
+const VERSION='0.9.1';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -179,12 +179,12 @@ function setRoleUI(roleName){
     empButton.classList.remove('hidden');
     if(typeof role==='function') role(true);
   }else if(roleName==='owner' || roleName==='admin'){
+    empButton.classList.add('hidden');
     employerButton.classList.remove('hidden');
-    empButton.classList.remove('hidden');
     if(typeof role==='function') role(false);
   }else{
-    employerButton.classList.remove('hidden');
-    empButton.classList.remove('hidden');
+    empButton.classList.add('hidden');
+    employerButton.classList.add('hidden');
   }
 }
 
@@ -578,6 +578,8 @@ async function queueOfflinePunch(){
   document.getElementById('camera').value='';
   document.getElementById('preview').style.display='none';
   document.getElementById('geoText').textContent='Ainda não capturada.';
+  const banner=document.getElementById('syncBanner');
+  if(banner){banner.textContent='Ponto salvo offline. Aguardando internet para sincronizar.';banner.classList.remove('hidden')}
   toast('Ponto salvo offline. Será sincronizado quando a internet voltar.');
   show('empHome',document.querySelector('#empNav [data-go="empHome"]'));
 }
@@ -601,6 +603,8 @@ async function syncOfflineQueue(showMessage=true){
   }
   if(synced){
     await loadPunchesForCurrentEmployee();
+    const banner=document.getElementById('syncBanner');
+    if(banner){banner.textContent=synced===1?'1 ponto offline sincronizado com sucesso.':synced+' pontos offline sincronizados com sucesso.';banner.classList.remove('hidden');setTimeout(()=>banner.classList.add('hidden'),8000)}
     if(showMessage)toast(synced===1?'1 ponto offline sincronizado.':synced+' pontos offline sincronizados.');
   }
   return synced;
@@ -778,6 +782,7 @@ function correctionToLocal(a,localEmployeeId){
     id:a.id,employeeId:localEmployeeId,type:a.requested_type,
     time:new Date(a.requested_time).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
     requestedTime:a.requested_time,reason:a.reason,note:a.note||'',
+    originalPunchId:a.original_punch_id||null,
     status:a.status,createdAt:a.requested_at,decidedAt:a.decided_at||null
   };
 }
@@ -798,6 +803,31 @@ async function loadEmployerCorrections(){
   st.adjustments=(data||[]).map(a=>correctionToLocal(a,byCloud.get(a.employee_id)||a.employee_id));
   save();render();
 }
+window.pcCorrectionPunchId=null;
+window.pcOpenCorrection=function(punchId){
+  const form=document.getElementById('adjustmentForm');
+  const original=document.getElementById('adjustmentOriginal');
+  window.pcCorrectionPunchId=punchId||null;
+  if(punchId){
+    const p=st.punches.find(x=>x.id===punchId);
+    if(!p)return;
+    const already=st.adjustments.find(a=>a.originalPunchId===punchId&&a.status==='Pendente');
+    if(already){toast('Já existe uma correção pendente para esta batida.');return}
+    document.getElementById('aType').value=p.type;
+    const d=new Date(p.deviceTime);
+    document.getElementById('aDate').value=d.toLocaleDateString('en-CA');
+    document.getElementById('aTime').value=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('aReason').value='Horário incorreto';
+    original.textContent='Batida original: '+p.type+' · '+d.toLocaleDateString('pt-BR')+' · '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    original.classList.remove('hidden');
+  }else{
+    document.getElementById('aDate').value=new Date().toLocaleDateString('en-CA');
+    document.getElementById('aReason').value='Esqueci de registrar';
+    original.classList.add('hidden');
+  }
+  form.classList.remove('hidden');
+  show('empAdj',document.querySelector('#empNav [data-go="empAdj"]'));
+};
 window.pcSendAdjustment=async function(){
   if(currentRole!=='employee'||!currentEmployeeCloudId){toast('Entre como empregado.');return}
   if(!navigator.onLine){toast('Solicitações de ajuste precisam de internet nesta versão.');return}
@@ -808,6 +838,7 @@ window.pcSendAdjustment=async function(){
   try{
     const {error}=await sb.from('correction_requests').insert({
       household_id:householdId,employee_id:currentEmployeeCloudId,
+      original_punch_id:window.pcCorrectionPunchId||null,
       requested_type:document.getElementById('aType').value,
       requested_time:requested.toISOString(),
       reason:document.getElementById('aReason').value,
@@ -815,6 +846,8 @@ window.pcSendAdjustment=async function(){
     });
     if(error)throw error;
     document.getElementById('aNote').value='';
+    document.getElementById('adjustmentForm').classList.add('hidden');
+    window.pcCorrectionPunchId=null;
     await loadCorrectionsForCurrentEmployee();
     toast('Solicitação enviada');
   }catch(e){console.error(e);alert('Não foi possível enviar a solicitação: '+e.message)}
