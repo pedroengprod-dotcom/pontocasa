@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.9.1</title>
+<title>PontoCasa v0.9.2</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -122,7 +122,7 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <div class="pillbar"><button class="active" data-more="reports">Relatórios</button><button data-more="adjustments">Correções</button><button data-more="settings">Configurações</button></div>
 <div id="moreReports">
 <div class="card"><b>Relatório por período</b><div class="grid3" style="margin-top:10px"><div><label>De</label><input id="reportFrom" type="date"></div><div><label>Até</label><input id="reportTo" type="date"></div><div style="display:flex;align-items:end"><button id="applyPeriod" class="secondary">Aplicar</button></div></div><div class="grid2" style="margin-top:10px"><button id="csv" class="secondary">Exportar CSV</button><button id="pdfFuture" class="secondary">PDF (versão definitiva)</button></div><div class="note" style="margin-top:10px">Na versão definitiva, o PDF terá espaço/fluxo para assinatura do empregador e do empregado.</div></div>
-<div class="tablewrap"><table><thead><tr><th>Empregado</th><th>Data</th><th>Tipo</th><th>Hora aparelho</th><th>Hora servidor</th><th>Status</th><th>Distância</th><th>Precisão</th><th>Endereço estimado</th><th>Coordenadas</th><th>Foto</th><th>Mapa</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Empregado</th><th>Situação</th><th>Data considerada</th><th>Tipo considerado</th><th>Horário considerado</th><th>Registro original</th><th>Correção aprovada</th><th>Hora servidor</th><th>Status localização</th><th>Distância</th><th>Precisão</th><th>Endereço estimado</th><th>Coordenadas</th><th>Foto</th><th>Mapa</th></tr></thead><tbody id="rows"></tbody></table></div>
 </div>
 <div id="moreAdjustments" class="hidden"></div>
 <div id="moreSettings" class="hidden"><div class="card"><b>Protótipo local</b><div class="small muted">Dados ficam só neste navegador/aparelho. Não use dados reais.</div><button id="reset" class="secondary" style="margin-top:10px;color:var(--bad)">Apagar dados de teste</button></div></div>
@@ -229,8 +229,57 @@ const todayKey=new Date().toISOString().slice(0,10);
 $('teamToday').innerHTML=st.employees.map(e=>{const ps=st.punches.filter(x=>x.employeeId===e.id&&x.deviceTime.slice(0,10)===todayKey).sort((a,b)=>a.deviceTime.localeCompare(b.deviceTime));return `<div class="card"><b>${e.name}</b><div style="margin-top:8px">${ps.length?ps.map(p=>{const c=approvedCorrectionForPunch(p.id);return `<button class="row" style="width:100%;background:white" data-detail="${p.id}"><div><b>${p.type} · ${fmtT(p.deviceTime)}</b>${c?`<div class="small" style="color:var(--good)">Correção aprovada: ${c.type} · ${c.time}</div>`:''}<div class="small muted">${p.status}</div></div><span>›</span></button>`}).join(''):'<div class="small muted">Sem marcações hoje.</div>'}</div></div>`}).join('');document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
 $('teamList').innerHTML=st.employees.map(e=>`<div class="row"><button data-edit="${e.id}"><b>${e.name}</b><div class="small muted">CPF ${e.cpf||'não informado'} · ${e.role}</div></button><span>›</span></div>`).join('');document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editEmp(b.dataset.edit));
 $('calSummary').innerHTML=`<b>${st.punches.length} marcações registradas</b><div class="small muted">Visão mensal completa virá depois.</div>`;
-const filtered=st.punches.filter(inRange).slice().reverse();
-$('rows').innerHTML=filtered.map(p=>`<tr><td>${emp(p.employeeId)?.name||''}</td><td>${fmtD(p.deviceTime)}</td><td>${p.type}</td><td>${fmtT(p.deviceTime)}</td><td>${fmtT(p.serverTime)}</td><td>${p.status}</td><td>${p.distance??'—'}</td><td>${p.accuracy?Math.round(p.accuracy)+' m':'—'}</td><td style="white-space:normal;min-width:260px">${p.addressEstimate||'—'}</td><td>${p.lat!=null?p.lat.toFixed(6)+', '+p.lon.toFixed(6):'—'}</td><td>${p.photo?`<button data-photo="${p.id}">Ver</button>`:'—'}</td><td>${p.lat!=null?`<a target="_blank" href="https://maps.google.com/?q=${p.lat},${p.lon}">Abrir</a>`:'—'}</td></tr>`).join('');document.querySelectorAll('[data-photo]').forEach(b=>b.onclick=()=>showPhoto(b.dataset.photo));
+function reportEntries(){
+  const entries=[];
+  st.punches.forEach(p=>{
+    if(!inRange(p))return;
+    const c=st.adjustments.find(a=>a.originalPunchId===p.id&&a.status==='Aprovado');
+    entries.push({
+      kind:c?'Corrigida':'Original',
+      employeeId:p.employeeId,
+      effectiveTime:c?.requestedTime||p.deviceTime,
+      effectiveType:c?.type||p.type,
+      original:p,
+      correction:c||null
+    });
+  });
+  st.adjustments.filter(a=>a.status==='Aprovado'&&!a.originalPunchId).forEach(a=>{
+    const pseudo={deviceTime:a.requestedTime};
+    if(!inRange(pseudo))return;
+    entries.push({
+      kind:'Incluída manualmente',
+      employeeId:a.employeeId,
+      effectiveTime:a.requestedTime,
+      effectiveType:a.type,
+      original:null,
+      correction:a
+    });
+  });
+  return entries.sort((a,b)=>new Date(b.effectiveTime)-new Date(a.effectiveTime));
+}
+const filtered=reportEntries();
+$('rows').innerHTML=filtered.map(x=>{
+  const p=x.original,c=x.correction;
+  const originalText=p?`${p.type} · ${fmtD(p.deviceTime)} · ${fmtT(p.deviceTime)}`:'—';
+  const correctionText=c?`${c.type} · ${fmtD(c.requestedTime)} · ${c.time} · ${c.reason}`:'—';
+  return `<tr>
+    <td>${emp(x.employeeId)?.name||''}</td>
+    <td><span class="status ${x.kind==='Corrigida'?'warn':x.kind==='Incluída manualmente'?'ok':''}">${x.kind}</span></td>
+    <td>${fmtD(x.effectiveTime)}</td>
+    <td>${x.effectiveType}</td>
+    <td>${fmtT(x.effectiveTime)}</td>
+    <td style="white-space:normal;min-width:230px">${originalText}</td>
+    <td style="white-space:normal;min-width:260px">${correctionText}</td>
+    <td>${p?.serverTime?fmtT(p.serverTime):'—'}</td>
+    <td>${p?.status||'Não se aplica'}</td>
+    <td>${p?.distance??'—'}</td>
+    <td>${p?.accuracy?Math.round(p.accuracy)+' m':'—'}</td>
+    <td style="white-space:normal;min-width:260px">${p?.addressEstimate||'—'}</td>
+    <td>${p?.lat!=null?p.lat.toFixed(6)+', '+p.lon.toFixed(6):'—'}</td>
+    <td>${p?.photo?`<button data-photo="${p.id}">Ver</button>`:'—'}</td>
+    <td>${p?.lat!=null?`<a target="_blank" href="https://maps.google.com/?q=${p.lat},${p.lon}">Abrir</a>`:'—'}</td>
+  </tr>`;
+}).join('');document.querySelectorAll('[data-photo]').forEach(b=>b.onclick=()=>showPhoto(b.dataset.photo));
 const pendingAdj=st.adjustments.filter(a=>a.status==='Pendente');const decidedAdj=st.adjustments.filter(a=>a.status!=='Pendente').sort((a,b)=>(b.decidedAt||'').localeCompare(a.decidedAt||''));
 $('moreAdjustments').innerHTML=`<div class="card"><b>Pendentes</b><div style="margin-top:10px">${pendingAdj.map(a=>`<div class="row"><div><b>${emp(a.employeeId)?.name||''} · ${a.type} ${a.time}</b><div class="small muted">${a.reason}</div></div></div><div class="grid2" style="margin:0 0 12px"><button class="secondary" data-decide="${a.id}" data-status="Aprovado">Aprovar</button><button class="secondary" data-decide="${a.id}" data-status="Rejeitado">Rejeitar</button></div>`).join('')||'<div class="small muted">Nenhuma pendência.</div>'}</div></div><div class="card"><b>Histórico de decisões</b><div style="margin-top:10px">${decidedAdj.map(a=>`<div class="row"><div><b>${emp(a.employeeId)?.name||''} · ${a.type} ${a.time}</b><div class="small muted">${a.reason}${a.originalPunchId?' · correção de batida':' · batida esquecida'}</div></div><span class="status ${a.status==='Aprovado'?'ok':'bad'}">${a.status}</span></div>`).join('')||'<div class="small muted">Nenhuma decisão registrada.</div>'}</div></div>`;document.querySelectorAll('[data-decide]').forEach(b=>b.onclick=()=>decide(b.dataset.decide,b.dataset.status))
 }
@@ -309,8 +358,17 @@ document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.quer
 $('applyPeriod').onclick=()=>{reportRange.from=$('reportFrom').value||null;reportRange.to=$('reportTo').value||null;render();toast('Período aplicado')};
 
 $('csv').onclick=()=>{
-const rows=[['Empregado','CPF','Data','Tipo','Hora aparelho','Hora servidor','Status','Distância m','Precisão m','Endereço estimado','Latitude','Longitude','Offline','Integridade']];
-st.punches.filter(inRange).forEach(p=>rows.push([emp(p.employeeId)?.name,emp(p.employeeId)?.cpf,fmtD(p.deviceTime),p.type,p.deviceTime,p.serverTime,p.status,p.distance??'',p.accuracy??'',p.addressEstimate||'',p.lat??'',p.lon??'',p.offline,p.integrityId]));
+const rows=[['Empregado','CPF','Situação','Data considerada','Tipo considerado','Horário considerado','Registro original','Correção aprovada','Hora servidor','Status localização','Distância m','Precisão m','Endereço estimado','Latitude','Longitude','Offline','Integridade']];
+reportEntries().forEach(x=>{
+  const e=emp(x.employeeId),p=x.original,c=x.correction;
+  rows.push([
+    e?.name,e?.cpf,x.kind,fmtD(x.effectiveTime),x.effectiveType,x.effectiveTime,
+    p?`${p.type} | ${p.deviceTime}`:'',
+    c?`${c.type} | ${c.requestedTime} | ${c.reason}`:'',
+    p?.serverTime||'',p?.status||'Não se aplica',p?.distance??'',p?.accuracy??'',
+    p?.addressEstimate||'',p?.lat??'',p?.lon??'',p?.offline??'',p?.integrityId||''
+  ]);
+});
 const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\r\n');
 const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pontocasa.csv';a.click();URL.revokeObjectURL(a.href)
 };
