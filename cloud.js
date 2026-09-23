@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.7.1';
+const VERSION='0.8';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -61,7 +61,7 @@ if(top) top.appendChild(account);
 const overlay=document.createElement('div');
 overlay.id='cloudPanel';
 overlay.className='hidden';
-css(overlay,{position:'fixed',inset:'0',background:'#0009',zIndex:'80',padding:'18px',overflow:'auto'});
+css(overlay,{position:'fixed',inset:'0',background:'#0009',zIndex:'110',padding:'18px',overflow:'auto'});
 overlay.innerHTML=`
 <div style="max-width:520px;margin:24px auto;background:white;border-radius:16px;padding:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -97,8 +97,13 @@ overlay.innerHTML=`
 document.body.appendChild(overlay);
 
 account.onclick=()=>overlay.classList.remove('hidden');
+document.getElementById('accessGateLogin').onclick=()=>{accessGate.classList.add('hidden');overlay.classList.remove('hidden')};
 document.getElementById('accessGateLogin').onclick=()=>overlay.classList.remove('hidden');
-document.getElementById('cloudClose').onclick=()=>overlay.classList.add('hidden');
+document.getElementById('cloudClose').onclick=async()=>{
+  overlay.classList.add('hidden');
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session) gate('Entre com sua conta para acessar o PontoCasa.',true);
+};
 
 const activation=document.createElement('div');
 activation.id='invitePanel';
@@ -206,7 +211,6 @@ async function refreshAuth(){
       document.getElementById('cloudWho').innerHTML=`<b>${esc(session.user.email||'')}</b><br>Perfil ainda não vinculado`;
       document.getElementById('cloudEmployerTools').classList.add('hidden');
       setRoleUI(null);
-
       if(currentInviteToken()){
         msg('Conta autenticada. Finalizando ativação do convite...');
         gate('Finalizando ativação do convite...',false);
@@ -237,7 +241,8 @@ async function refreshAuth(){
       msg('Conta de empregado conectada.');
       openApp();
     }else if(currentRole==='owner' || currentRole==='admin'){
-      msg('Conta conectada.');
+      await loadEmployerCloudData();
+      msg('Conta de empregador conectada.');
       openApp();
     }else{
       gate('Perfil sem permissão de acesso.',false);
@@ -498,6 +503,172 @@ async function loadEmployeeForCurrentUser(){
 
   render();
 }
+
+
+function dataUrlToBlob(dataUrl){
+  const parts=dataUrl.split(',');
+  const mime=(parts[0].match(/data:([^;]+)/)||[])[1]||'image/jpeg';
+  const bin=atob(parts[1]||'');
+  const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+
+function cloudPunchToLocal(p, localEmployeeId){
+  return {
+    id:p.id,
+    employeeId:localEmployeeId,
+    type:p.punch_type,
+    deviceTime:p.device_time,
+    serverTime:p.server_received_at,
+    syncTime:p.sync_received_at,
+    lat:p.latitude,
+    lon:p.longitude,
+    accuracy:p.accuracy_m,
+    distance:p.distance_to_workplace_m,
+    status:p.location_status,
+    addressEstimate:p.estimated_address||'Endereço estimado indisponível',
+    photo:p.photo_path?'cloud':null,
+    cloudPhotoPath:p.photo_path||null,
+    installationId:p.installation_id,
+    offline:!!p.was_offline,
+    integrityId:p.evidence_hash||p.id
+  };
+}
+
+async function loadPunchesForCurrentEmployee(){
+  if(!currentEmployeeCloudId) return;
+  const {data,error}=await sb.from('punches')
+    .select('*')
+    .eq('employee_id',currentEmployeeCloudId)
+    .order('device_time',{ascending:true});
+  if(error) throw error;
+  st.punches=(data||[]).map(p=>cloudPunchToLocal(p,'e1'));
+  save();
+  render();
+}
+
+async function loadEmployerCloudData(){
+  await ensureHousehold();
+  const {data:employees,error}=await sb.from('employees')
+    .select('*')
+    .eq('household_id',householdId)
+    .eq('active',true)
+    .order('created_at');
+  if(error) throw error;
+
+  const loaded=[];
+  for(let i=0;i<(employees||[]).length;i++){
+    loaded.push(await cloudEmployeeToLocal(employees[i],i));
+  }
+  if(loaded.length) st.employees=loaded;
+
+  const {data:punchRows,error:pErr}=await sb.from('punches')
+    .select('*')
+    .eq('household_id',householdId)
+    .order('device_time',{ascending:true});
+  if(pErr) throw pErr;
+
+  const byCloud=new Map(st.employees.map(e=>[e.cloudId,e.id]));
+  st.punches=(punchRows||[]).map(p=>cloudPunchToLocal(p,byCloud.get(p.employee_id)||p.employee_id));
+  save();
+  render();
+}
+
+async function saveCloudPunch(){
+  if(!currentSession || currentRole!=='employee' || !currentEmployeeCloudId){
+    toast('Entre com a conta do empregado.');
+    return;
+  }
+  if(!navigator.onLine){
+    toast('Sem conexão. Sincronização offline entra na próxima etapa.');
+    return;
+  }
+  if(!photo){toast('Tire a foto obrigatória.');return}
+
+  const recent=st.punches.filter(x=>x.employeeId==='e1').sort((a,b)=>b.deviceTime.localeCompare(a.deviceTime))[0];
+  if(recent && Date.now()-new Date(recent.deviceTime).getTime()<120000 && !confirm('Você acabou de registrar um ponto. Registrar outro?')) return;
+
+  const btn=document.getElementById('savePunch');
+  btn.disabled=true;
+  const oldText=btn.textContent;
+  btn.textContent='Registrando...';
+
+  try{
+    const employee=st.employees[0];
+    const w=employee.workplace;
+    const c=classify(loc,w);
+    const punchId=crypto.randomUUID();
+    const now=new Date();
+    const ext=(photo.match(/^data:image\/(png|webp)/)||[])[1]||'jpeg';
+    const path=`${householdId}/${currentEmployeeCloudId}/${punchId}.${ext==='jpeg'?'jpg':ext}`;
+    const blob=dataUrlToBlob(photo);
+
+    const {error:upErr}=await sb.storage.from('punch-photos').upload(path,blob,{
+      contentType:blob.type||'image/jpeg',
+      upsert:false
+    });
+    if(upErr) throw upErr;
+
+    const payload={
+      id:punchId,
+      household_id:householdId,
+      employee_id:currentEmployeeCloudId,
+      punch_type:document.getElementById('pType').value,
+      device_time:now.toISOString(),
+      latitude:loc?.lat??null,
+      longitude:loc?.lon??null,
+      accuracy_m:loc?.acc??null,
+      distance_to_workplace_m:c.d,
+      location_status:c.text,
+      estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
+      photo_path:path,
+      installation_id:inst(),
+      app_version:'0.8',
+      platform:navigator.userAgent.slice(0,500),
+      was_offline:false
+    };
+
+    const {data,error}=await sb.from('punches').insert(payload).select('*').single();
+    if(error) throw error;
+
+    st.punches.push(cloudPunchToLocal(data,'e1'));
+    save();
+
+    photo=null; loc=null;
+    document.getElementById('camera').value='';
+    document.getElementById('preview').style.display='none';
+    document.getElementById('geoText').textContent='Ainda não capturada.';
+    toast('Ponto registrado na nuvem');
+    show('empHome',document.querySelector('#empNav [data-go="empHome"]'));
+  }catch(e){
+    console.error(e);
+    alert('Não foi possível registrar o ponto: '+e.message);
+  }finally{
+    btn.disabled=false;
+    btn.textContent=oldText;
+  }
+}
+
+const originalShowPhoto=window.showPhoto;
+window.showPhoto=async function(id){
+  const p=st.punches.find(x=>x.id===id);
+  if(p?.cloudPhotoPath){
+    try{
+      const {data,error}=await sb.storage.from('punch-photos').createSignedUrl(p.cloudPhotoPath,60);
+      if(error) throw error;
+      document.getElementById('modalPhoto').src=data.signedUrl;
+      document.getElementById('photoModal').classList.remove('hidden');
+      return;
+    }catch(e){
+      alert('Não foi possível abrir a foto: '+e.message);
+      return;
+    }
+  }
+  if(originalShowPhoto) return originalShowPhoto(id);
+};
+
+document.getElementById('savePunch').onclick=saveCloudPunch;
 
 async function generateInviteForEmployee(localEmployee){
   if(!currentSession) throw new Error('Entre na conta do empregador primeiro.');
