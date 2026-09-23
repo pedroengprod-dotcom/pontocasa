@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.8</title>
+<title>PontoCasa v0.8.1</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -138,19 +138,34 @@ function classify(l,w){if(!l)return{text:'Localização indisponível',d:null};i
 function inst(){let x=localStorage.getItem('pc-inst');if(!x){x=uid();localStorage.setItem('pc-inst',x)}return x}
 
 async function reverseGeocode(lat,lon){
+  const cacheKey='pc-rg-'+Number(lat).toFixed(5)+','+Number(lon).toFixed(5);
+  const cached=localStorage.getItem(cacheKey);
+  if(cached)return cached;
+
+  try{
+    if(window.pontoCasaSupabase){
+      const {data,error}=await window.pontoCasaSupabase.functions.invoke('reverse-geocode',{
+        body:{lat:Number(lat),lon:Number(lon)}
+      });
+      if(!error && data?.address){
+        localStorage.setItem(cacheKey,data.address);
+        return data.address;
+      }
+    }
+  }catch(e){console.warn('Reverse geocode proxy falhou',e)}
+
   try{
     const u=`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&localityLanguage=pt`;
     const r=await fetch(u);
     if(r.ok){
       const j=await r.json();
       const parts=[j.locality,j.city,j.principalSubdivision,j.postcode,j.countryName].filter(Boolean);
-      if(parts.length)return parts.join(', ');
+      if(parts.length){
+        const fallback=parts.join(', ');
+        localStorage.setItem(cacheKey,fallback);
+        return fallback;
+      }
     }
-  }catch(e){}
-  try{
-    const u=`https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`;
-    const r=await fetch(u,{headers:{'Accept-Language':'pt-BR'}});
-    if(r.ok){const j=await r.json();if(j.display_name)return j.display_name}
   }catch(e){}
   return 'Endereço estimado indisponível';
 }
