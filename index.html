@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.9.4</title>
+<title>PontoCasa v0.10</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -76,7 +76,19 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 </section>
 
 <section id="erToday" class="screen"><h1 class="title">Hoje</h1><div class="sub">Equipe e divergências.</div><div id="teamToday"></div><div id="detail" class="card hidden"></div></section>
-<section id="erCal" class="screen"><h1 class="title">Calendário</h1><div class="card" id="calSummary"></div></section>
+<section id="erCal" class="screen">
+<h1 class="title">Calendário</h1>
+<div class="sub">Apuração diária com base na jornada cadastrada e nas marcações consideradas após correções aprovadas.</div>
+<div class="card">
+  <div class="grid2">
+    <div><label>Empregado</label><select id="calEmployee"></select></div>
+    <div><label>Mês</label><input id="calMonth" type="month"></div>
+  </div>
+</div>
+<div id="calSummary"></div>
+<div id="calDays"></div>
+<div class="note">Dias com marcações incompletas não entram automaticamente no saldo. Eles aparecem como pendência para conferência.</div>
+</section>
 
 <section id="erTeam" class="screen">
 <div style="display:flex;justify-content:space-between;align-items:center"><div><h1 class="title">Equipe</h1><div class="sub">Cadastre e configure.</div></div><button id="addEmp" class="secondary" style="width:auto">+ Adicionar</button></div>
@@ -122,7 +134,9 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <div class="pillbar"><button class="active" data-more="reports">Relatórios</button><button data-more="adjustments">Correções</button><button data-more="settings">Configurações</button></div>
 <div id="moreReports">
 <div class="card"><b>Relatório por período</b><div class="grid3" style="margin-top:10px"><div><label>De</label><input id="reportFrom" type="date"></div><div><label>Até</label><input id="reportTo" type="date"></div><div style="display:flex;align-items:end"><button id="applyPeriod" class="secondary">Aplicar</button></div></div><div class="grid2" style="margin-top:10px"><button id="csv" class="secondary">Exportar CSV</button><button id="pdfFuture" class="secondary">PDF (versão definitiva)</button></div><div class="note" style="margin-top:10px">Na versão definitiva, o PDF terá espaço/fluxo para assinatura do empregador e do empregado.</div></div>
-<div class="tablewrap"><table><thead><tr><th>Empregado</th><th>Situação</th><th>Data considerada</th><th>Tipo considerado</th><th>Horário considerado</th><th>Registro original</th><th>Correção aprovada</th><th>Hora servidor</th><th>Status localização</th><th>Distância</th><th>Precisão</th><th>Endereço estimado</th><th>Coordenadas</th><th>Foto</th><th>Mapa</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div id="reportHoursSummary" style="margin-bottom:12px"></div>
+<div class="card"><b>Apuração diária do período</b><div class="tablewrap" style="margin-top:10px"><table style="min-width:900px"><thead><tr><th>Empregado</th><th>Data</th><th>Previsto</th><th>Trabalhado</th><th>Horas a mais</th><th>Horas pendentes</th><th>Saldo</th><th>Situação</th></tr></thead><tbody id="hoursRows"></tbody></table></div></div>
+<div class="card"><b>Registros e evidências</b><div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Empregado</th><th>Situação</th><th>Data considerada</th><th>Tipo considerado</th><th>Horário considerado</th><th>Registro original</th><th>Correção aprovada</th><th>Hora servidor</th><th>Status localização</th><th>Distância</th><th>Precisão</th><th>Endereço estimado</th><th>Coordenadas</th><th>Foto</th><th>Mapa</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </div>
 <div id="moreAdjustments" class="hidden"></div>
 <div id="moreSettings" class="hidden"><div class="card"><b>Protótipo local</b><div class="small muted">Dados ficam só neste navegador/aparelho. Não use dados reais.</div><button id="reset" class="secondary" style="margin-top:10px;color:var(--bad)">Apagar dados de teste</button></div></div>
@@ -141,13 +155,82 @@ const KEY='pontocasa-v05';
 const baseSched={0:{works:false,start:'',bs:'',be:'',end:''},1:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},2:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},3:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},4:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},5:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},6:{works:false,start:'',bs:'',be:'',end:''}};
 let st=JSON.parse(localStorage.getItem(KEY)||'null')||{employees:[{id:'e1',name:'Maria',cpf:'000.000.000-00',pis:'',contact:'',admission:'',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],punches:[],adjustments:[]};
 let photo=null,loc=null,editing='e1',employeeSnapshot=null,scheduleSnapshot=null,workSnapshot=null,reportRange={from:null,to:null};
+let calendarMonth=new Date().toLocaleDateString('en-CA').slice(0,7),calendarEmployeeId=null;
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(st)),uid=()=>crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random(),fmtT=s=>new Date(s).toLocaleTimeString('pt-BR'),fmtD=s=>new Date(s).toLocaleDateString('pt-BR');
 function fmtDateTimeLocal(s){if(!s)return'';const d=new Date(s);return d.toLocaleString('pt-BR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}
 function tzName(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'Horário local'}catch(e){return'Horário local'}}
+
+function localDateKey(s){return new Date(s).toLocaleDateString('en-CA')}
+function hmToMin(v){if(!v||!/^[0-2]\d:[0-5]\d$/.test(v))return null;const [h,m]=v.split(':').map(Number);return h*60+m}
+function durMin(a,b){const x=hmToMin(a),y=hmToMin(b);return x==null||y==null?0:Math.max(0,y-x)}
+function fmtMin(m){
+  if(m==null)return'—';
+  const sign=m<0?'-':m>0?'+':'';
+  const n=Math.abs(Math.round(m)),h=Math.floor(n/60),mm=n%60;
+  return sign+h+'h'+String(mm).padStart(2,'0');
+}
+function scheduleMinutes(e,dateKey){
+  const d=new Date(dateKey+'T12:00:00');
+  const s=e.schedule?.[d.getDay()];
+  if(!s?.works)return 0;
+  if(s.start&&s.bs&&s.be&&s.end)return durMin(s.start,s.bs)+durMin(s.be,s.end);
+  if(s.start&&s.end)return durMin(s.start,s.end);
+  return 0;
+}
+function effectiveEventsForEmployee(employeeId){
+  const out=[];
+  st.punches.filter(p=>p.employeeId===employeeId).forEach(p=>{
+    const c=st.adjustments.find(a=>a.originalPunchId===p.id&&a.status==='Aprovado');
+    out.push({type:c?.type||p.type,time:c?.requestedTime||p.deviceTime,source:c?'Corrigida':'Original',punch:p,correction:c||null});
+  });
+  st.adjustments.filter(a=>a.employeeId===employeeId&&a.status==='Aprovado'&&!a.originalPunchId).forEach(a=>{
+    out.push({type:a.type,time:a.requestedTime,source:'Incluída manualmente',punch:null,correction:a});
+  });
+  return out.sort((a,b)=>new Date(a.time)-new Date(b.time));
+}
+function dayHours(employee,dateKey){
+  const planned=scheduleMinutes(employee,dateKey);
+  const ev=effectiveEventsForEmployee(employee.id).filter(x=>localDateKey(x.time)===dateKey);
+  const first=t=>ev.find(x=>x.type===t);
+  const last=t=>[...ev].reverse().find(x=>x.type===t);
+  const entrada=first('Entrada'),saida=last('Saída'),bs=first('Início do intervalo'),be=last('Fim do intervalo');
+  let worked=null,status='Sem marcação';
+  if(ev.length){
+    const sch=employee.schedule?.[new Date(dateKey+'T12:00:00').getDay()];
+    const expectsBreak=!!(sch?.works&&sch.bs&&sch.be);
+    if(entrada&&saida&&(!expectsBreak||(bs&&be))){
+      if(expectsBreak){
+        worked=Math.max(0,(new Date(bs.time)-new Date(entrada.time))/60000)+Math.max(0,(new Date(saida.time)-new Date(be.time))/60000);
+      }else{
+        worked=Math.max(0,(new Date(saida.time)-new Date(entrada.time))/60000);
+      }
+      status='Completo';
+    }else status='Marcações incompletas';
+  }else if(planned===0)status='Folga/sem jornada prevista';
+  const balance=worked==null?null:worked-planned;
+  return {dateKey,planned,worked,balance,extra:balance==null?null:Math.max(0,balance),pending:balance==null?null:Math.max(0,-balance),status,events:ev};
+}
+function periodDays(employee,from,to){
+  if(!from||!to)return[];
+  const days=[],d=new Date(from+'T12:00:00'),end=new Date(to+'T12:00:00');
+  for(;d<=end;d.setDate(d.getDate()+1)){
+    const k=d.toLocaleDateString('en-CA');
+    days.push(dayHours(employee,k));
+  }
+  return days;
+}
+function hoursSummary(days){
+  return days.reduce((a,d)=>{
+    a.planned+=d.planned||0;
+    if(d.worked!=null){a.worked+=d.worked;a.extra+=d.extra||0;a.pending+=d.pending||0;a.balance+=d.balance||0;a.complete++}
+    if(d.status==='Marcações incompletas')a.incomplete++;
+    return a;
+  },{planned:0,worked:0,extra:0,pending:0,balance:0,complete:0,incomplete:0});
+}
 function toast(m){$('toast').textContent=m;$('toast').style.display='block';setTimeout(()=>{$('toast').style.display='none'},1800)}
 function show(id,b){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');if(id==='empPunch')capturePunchLocation();render()}
 function role(emp){$('rEmp').classList.toggle('active',emp);$('rEr').classList.toggle('active',!emp);$('empNav').classList.toggle('hidden',!emp);$('erNav').classList.toggle('hidden',emp);show(emp?'empHome':'erToday',document.querySelector(emp?'#empNav button':'#erNav button'))}
-$('rEmp').onclick=()=>role(true);$('rEr').onclick=()=>role(false);document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.go,b));$('today').textContent=new Date().toLocaleDateString('pt-BR',{dateStyle:'full'});if($('aDate'))$('aDate').value=new Date().toISOString().slice(0,10);
+$('rEmp').onclick=()=>role(true);$('rEr').onclick=()=>role(false);document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.go,b));$('today').textContent=new Date().toLocaleDateString('pt-BR',{dateStyle:'full'});if($('aDate'))$('aDate').value=new Date().toISOString().slice(0,10);if($('calMonth'))$('calMonth').value=calendarMonth;
 
 function dist(a,b,c,d){const R=6371000,p=Math.PI/180,x=Math.sin((c-a)*p/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin((d-b)*p/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
 function classify(l,w){if(!l)return{text:'Localização indisponível',d:null};if(l.acc>200)return{text:'Baixa precisão',d:w.lat==null?null:Math.round(dist(l.lat,l.lon,w.lat,w.lon))};if(w.lat==null)return{text:'Local ainda não configurado',d:null};const d=Math.round(dist(l.lat,l.lon,w.lat,w.lon));return{text:d<=w.radius?'Dentro do local de trabalho':'Fora do local de trabalho',d}}
@@ -230,7 +313,30 @@ function renderEr(){
 const todayKey=new Date().toISOString().slice(0,10);
 $('teamToday').innerHTML=st.employees.map(e=>{const ps=st.punches.filter(x=>x.employeeId===e.id&&x.deviceTime.slice(0,10)===todayKey).sort((a,b)=>a.deviceTime.localeCompare(b.deviceTime));return `<div class="card"><b>${e.name}</b><div style="margin-top:8px">${ps.length?ps.map(p=>{const c=approvedCorrectionForPunch(p.id);return `<button class="row" style="width:100%;background:white" data-detail="${p.id}"><div><b>${p.type} · ${fmtT(p.deviceTime)}</b>${c?`<div class="small" style="color:var(--good)">Correção aprovada: ${c.type} · ${c.time}</div>`:''}<div class="small muted">${p.status}</div></div><span>›</span></button>`}).join(''):'<div class="small muted">Sem marcações hoje.</div>'}</div></div>`}).join('');document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
 $('teamList').innerHTML=st.employees.map(e=>`<div class="row"><button data-edit="${e.id}"><b>${e.name}</b><div class="small muted">CPF ${e.cpf||'não informado'} · ${e.role}</div></button><span>›</span></div>`).join('');document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editEmp(b.dataset.edit));
-$('calSummary').innerHTML=`<b>${st.punches.length} marcações registradas</b><div class="small muted">Visão mensal completa virá depois.</div>`;
+if($('calEmployee')){
+  const previous=$('calEmployee').value||calendarEmployeeId||st.employees[0]?.id;
+  $('calEmployee').innerHTML=st.employees.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  calendarEmployeeId=st.employees.some(e=>e.id===previous)?previous:st.employees[0]?.id;
+  $('calEmployee').value=calendarEmployeeId||'';
+}
+if($('calMonth')&&!$('calMonth').value)$('calMonth').value=calendarMonth;
+const calEmp=emp(calendarEmployeeId||st.employees[0]?.id);
+if(calEmp){
+  const m=$('calMonth')?.value||calendarMonth;
+  const [yy,mm]=m.split('-').map(Number);
+  const from=m+'-01',to=new Date(yy,mm,0).toLocaleDateString('en-CA');
+  const days=periodDays(calEmp,from,to);
+  const sum=hoursSummary(days);
+  $('calSummary').innerHTML=`<div class="grid2">
+    <div class="card"><div class="small muted">Previsto no mês</div><b>${fmtMin(sum.planned)}</b></div>
+    <div class="card"><div class="small muted">Trabalhado apurado</div><b>${fmtMin(sum.worked)}</b></div>
+    <div class="card"><div class="small muted">Horas a mais</div><b>${fmtMin(sum.extra)}</b></div>
+    <div class="card"><div class="small muted">Horas pendentes</div><b>${fmtMin(sum.pending)}</b></div>
+    <div class="card"><div class="small muted">Saldo de jornada</div><b>${fmtMin(sum.balance)}</b></div>
+    <div class="card"><div class="small muted">Banco de horas</div><b>Não configurado</b></div>
+  </div>`;
+  $('calDays').innerHTML=days.slice().reverse().map(d=>`<div class="card"><div style="display:flex;justify-content:space-between;gap:10px"><div><b>${new Date(d.dateKey+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})}</b><div class="small muted">${d.status}</div></div><span class="status ${d.status==='Completo'?(d.balance>=0?'ok':'warn'):d.status==='Marcações incompletas'?'bad':''}">${d.balance==null?'—':fmtMin(d.balance)}</span></div><div class="grid3" style="margin-top:10px"><div><div class="small muted">Previsto</div><b>${fmtMin(d.planned)}</b></div><div><div class="small muted">Trabalhado</div><b>${fmtMin(d.worked)}</b></div><div><div class="small muted">Saldo</div><b>${fmtMin(d.balance)}</b></div></div>${d.events.length?`<div class="small muted" style="margin-top:8px">${d.events.map(x=>x.type+' '+fmtT(x.time)+(x.source!=='Original'?' ('+x.source+')':'')).join(' · ')}</div>`:''}</div>`).join('');
+}
 function reportEntries(){
   const entries=[];
   st.punches.forEach(p=>{
@@ -260,6 +366,20 @@ function reportEntries(){
   return entries.sort((a,b)=>new Date(b.effectiveTime)-new Date(a.effectiveTime));
 }
 const filtered=reportEntries();
+const rangeFrom=reportRange.from||new Date(new Date().getFullYear(),new Date().getMonth(),1).toLocaleDateString('en-CA');
+const rangeTo=reportRange.to||new Date().toLocaleDateString('en-CA');
+const allDayRows=[];
+st.employees.forEach(e=>periodDays(e,rangeFrom,rangeTo).forEach(d=>allDayRows.push({employee:e,day:d})));
+const totalHours=hoursSummary(allDayRows.map(x=>x.day));
+if($('reportHoursSummary'))$('reportHoursSummary').innerHTML=`<div class="grid2">
+<div class="card"><div class="small muted">Previsto no período</div><b>${fmtMin(totalHours.planned)}</b></div>
+<div class="card"><div class="small muted">Trabalhado apurado</div><b>${fmtMin(totalHours.worked)}</b></div>
+<div class="card"><div class="small muted">Horas a mais</div><b>${fmtMin(totalHours.extra)}</b></div>
+<div class="card"><div class="small muted">Horas pendentes</div><b>${fmtMin(totalHours.pending)}</b></div>
+<div class="card"><div class="small muted">Saldo de jornada</div><b>${fmtMin(totalHours.balance)}</b></div>
+<div class="card"><div class="small muted">Banco de horas</div><b>Não configurado</b></div>
+</div>`;
+if($('hoursRows'))$('hoursRows').innerHTML=allDayRows.filter(x=>x.day.planned>0||x.day.events.length).sort((a,b)=>b.day.dateKey.localeCompare(a.day.dateKey)).map(x=>`<tr><td>${x.employee.name}</td><td>${new Date(x.day.dateKey+'T12:00:00').toLocaleDateString('pt-BR')}</td><td>${fmtMin(x.day.planned)}</td><td>${fmtMin(x.day.worked)}</td><td>${x.day.extra==null?'—':fmtMin(x.day.extra)}</td><td>${x.day.pending==null?'—':fmtMin(x.day.pending)}</td><td>${fmtMin(x.day.balance)}</td><td>${x.day.status}</td></tr>`).join('');
 $('rows').innerHTML=filtered.map(x=>{
   const p=x.original,c=x.correction;
   const originalText=p?`${p.type} · ${fmtD(p.deviceTime)} · ${fmtT(p.deviceTime)}`:'—';
@@ -357,6 +477,8 @@ e.workplace=after;save();workSnapshot=null;setWorkEdit(false);toast('Local salvo
 $('closeEditor').onclick=()=>$('editor').classList.add('hidden');
 
 document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-more]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['Reports','Adjustments','Settings'].forEach(x=>$('more'+x).classList.add('hidden'));$('more'+b.dataset.more[0].toUpperCase()+b.dataset.more.slice(1)).classList.remove('hidden')});
+if($('calEmployee'))$('calEmployee').onchange=e=>{calendarEmployeeId=e.target.value;render()};
+if($('calMonth'))$('calMonth').onchange=e=>{calendarMonth=e.target.value;render()};
 $('applyPeriod').onclick=()=>{reportRange.from=$('reportFrom').value||null;reportRange.to=$('reportTo').value||null;render();toast('Período aplicado')};
 
 $('csv').onclick=()=>{
@@ -404,6 +526,21 @@ try{
       p?.addressEstimate||'',p?.lat??'',p?.lon??'',p?.offline??'',p?.integrityId||''
     ]);
   });
+  rows.push([]);
+  rows.push(['APURAÇÃO DIÁRIA']);
+  rows.push(['Empregado','Data','Previsto','Trabalhado','Horas a mais','Horas pendentes','Saldo','Situação']);
+  const rf=reportRange.from||new Date(new Date().getFullYear(),new Date().getMonth(),1).toLocaleDateString('en-CA');
+  const rt=reportRange.to||new Date().toLocaleDateString('en-CA');
+  st.employees.forEach(e=>periodDays(e,rf,rt).filter(d=>d.planned>0||d.events.length).forEach(d=>rows.push([e.name,d.dateKey,fmtMin(d.planned),fmtMin(d.worked),d.extra==null?'':fmtMin(d.extra),d.pending==null?'':fmtMin(d.pending),fmtMin(d.balance),d.status])));
+  rows.push([]);
+  rows.push(['RESUMO DO PERÍODO']);
+  const sumCsv=hoursSummary(st.employees.flatMap(e=>periodDays(e,rf,rt)));
+  rows.push(['Previsto',fmtMin(sumCsv.planned)]);
+  rows.push(['Trabalhado apurado',fmtMin(sumCsv.worked)]);
+  rows.push(['Horas a mais',fmtMin(sumCsv.extra)]);
+  rows.push(['Horas pendentes',fmtMin(sumCsv.pending)]);
+  rows.push(['Saldo de jornada',fmtMin(sumCsv.balance)]);
+  rows.push(['Banco de horas','Não configurado']);
   const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\r\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
