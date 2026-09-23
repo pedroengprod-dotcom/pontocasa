@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.7';
+const VERSION='0.7.1';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -27,6 +27,28 @@ function makeBtn(t, cls='secondary'){
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
 function appBaseUrl(){
   return window.location.origin + window.location.pathname.replace(/\/[^/]*$/,'/');
+}
+
+const accessGate=document.createElement('div');
+accessGate.id='accessGate';
+css(accessGate,{position:'fixed',inset:'0',background:'#f6f7f8',zIndex:'90',padding:'24px',display:'flex',alignItems:'center',justifyContent:'center'});
+accessGate.innerHTML=`
+<div style="max-width:420px;width:100%;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px;text-align:center">
+  <div style="font-size:22px;font-weight:800">PontoCasa</div>
+  <div id="accessGateText" class="small muted" style="margin-top:8px">Verificando acesso...</div>
+  <button id="accessGateLogin" class="primary hidden" style="margin-top:14px">Entrar</button>
+</div>`;
+document.body.appendChild(accessGate);
+
+function gate(text,showLogin=false){
+  const t=document.getElementById('accessGateText');
+  if(t)t.textContent=text;
+  const b=document.getElementById('accessGateLogin');
+  if(b)b.classList.toggle('hidden',!showLogin);
+  accessGate.classList.remove('hidden');
+}
+function openApp(){
+  accessGate.classList.add('hidden');
 }
 
 const account=makeBtn('Conta');
@@ -75,6 +97,7 @@ overlay.innerHTML=`
 document.body.appendChild(overlay);
 
 account.onclick=()=>overlay.classList.remove('hidden');
+document.getElementById('accessGateLogin').onclick=()=>overlay.classList.remove('hidden');
 document.getElementById('cloudClose').onclick=()=>overlay.classList.add('hidden');
 
 const activation=document.createElement('div');
@@ -172,16 +195,26 @@ async function refreshAuth(){
     msg('Entre ou crie uma conta.');
     document.getElementById('cloudWho').textContent='';
     setRoleUI(null);
+    gate('Entre com sua conta para acessar o PontoCasa.',true);
     return;
   }
 
   try{
-    let membership=await getMembership();
+    const membership=await getMembership();
 
     if(!membership){
-      // A newly-created employer has no membership yet; create the household.
-      await ensureHousehold();
-      membership=await getMembership();
+      document.getElementById('cloudWho').innerHTML=`<b>${esc(session.user.email||'')}</b><br>Perfil ainda não vinculado`;
+      document.getElementById('cloudEmployerTools').classList.add('hidden');
+      setRoleUI(null);
+
+      if(currentInviteToken()){
+        msg('Conta autenticada. Finalizando ativação do convite...');
+        gate('Finalizando ativação do convite...',false);
+      }else{
+        msg('Esta conta ainda não possui perfil no PontoCasa.');
+        gate('Esta conta ainda não possui acesso a um grupo PontoCasa.',true);
+      }
+      return;
     }
 
     const email=session.user.email || '';
@@ -202,12 +235,17 @@ async function refreshAuth(){
     if(currentRole==='employee'){
       await loadEmployeeForCurrentUser();
       msg('Conta de empregado conectada.');
-    }else{
+      openApp();
+    }else if(currentRole==='owner' || currentRole==='admin'){
       msg('Conta conectada.');
+      openApp();
+    }else{
+      gate('Perfil sem permissão de acesso.',false);
     }
   }catch(e){
     console.error(e);
     msg('Erro ao identificar o perfil: '+e.message);
+    gate('Não foi possível validar seu acesso. Tente novamente.',true);
   }
 }
 
@@ -622,7 +660,14 @@ async function bootInvite(){
   }
 }
 
-sb.auth.onAuthStateChange(()=>refreshAuth());
+sb.auth.onAuthStateChange(async()=>{
+  if(currentInviteToken()){
+    gate('Finalizando ativação do convite...',false);
+    return;
+  }
+  await refreshAuth();
+});
+gate('Verificando acesso...',false);
 refreshAuth();
 bootInvite();
 })();
