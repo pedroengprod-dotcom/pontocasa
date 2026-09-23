@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.9.2</title>
+<title>PontoCasa v0.9.3</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -358,19 +358,59 @@ document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.quer
 $('applyPeriod').onclick=()=>{reportRange.from=$('reportFrom').value||null;reportRange.to=$('reportTo').value||null;render();toast('Período aplicado')};
 
 $('csv').onclick=()=>{
-const rows=[['Empregado','CPF','Situação','Data considerada','Tipo considerado','Horário considerado','Registro original','Correção aprovada','Hora servidor','Status localização','Distância m','Precisão m','Endereço estimado','Latitude','Longitude','Offline','Integridade']];
-reportEntries().forEach(x=>{
-  const e=emp(x.employeeId),p=x.original,c=x.correction;
-  rows.push([
-    e?.name,e?.cpf,x.kind,fmtD(x.effectiveTime),x.effectiveType,x.effectiveTime,
-    p?`${p.type} | ${p.deviceTime}`:'',
-    c?`${c.type} | ${c.requestedTime} | ${c.reason}`:'',
-    p?.serverTime||'',p?.status||'Não se aplica',p?.distance??'',p?.accuracy??'',
-    p?.addressEstimate||'',p?.lat??'',p?.lon??'',p?.offline??'',p?.integrityId||''
-  ]);
-});
-const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\r\n');
-const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pontocasa.csv';a.click();URL.revokeObjectURL(a.href)
+try{
+  const entries=[];
+  st.punches.forEach(p=>{
+    if(!inRange(p))return;
+    const c=st.adjustments.find(a=>a.originalPunchId===p.id&&a.status==='Aprovado');
+    entries.push({
+      kind:c?'Corrigida':'Original',
+      employeeId:p.employeeId,
+      effectiveTime:c?.requestedTime||p.deviceTime,
+      effectiveType:c?.type||p.type,
+      original:p,
+      correction:c||null
+    });
+  });
+  st.adjustments.filter(a=>a.status==='Aprovado'&&!a.originalPunchId).forEach(a=>{
+    const pseudo={deviceTime:a.requestedTime};
+    if(!inRange(pseudo))return;
+    entries.push({
+      kind:'Incluída manualmente',
+      employeeId:a.employeeId,
+      effectiveTime:a.requestedTime,
+      effectiveType:a.type,
+      original:null,
+      correction:a
+    });
+  });
+  entries.sort((a,b)=>new Date(b.effectiveTime)-new Date(a.effectiveTime));
+
+  const rows=[['Empregado','CPF','Situação','Data considerada','Tipo considerado','Horário considerado','Registro original','Correção aprovada','Hora servidor','Status localização','Distância m','Precisão m','Endereço estimado','Latitude','Longitude','Offline','Integridade']];
+  entries.forEach(x=>{
+    const e=emp(x.employeeId),p=x.original,c=x.correction;
+    rows.push([
+      e?.name||'',e?.cpf||'',x.kind,fmtD(x.effectiveTime),x.effectiveType,x.effectiveTime,
+      p?`${p.type} | ${p.deviceTime}`:'',
+      c?`${c.type} | ${c.requestedTime} | ${c.reason}`:'',
+      p?.serverTime||'',p?.status||'Não se aplica',p?.distance??'',p?.accuracy??'',
+      p?.addressEstimate||'',p?.lat??'',p?.lon??'',p?.offline??'',p?.integrityId||''
+    ]);
+  });
+  const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='pontocasa.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1000);
+  toast('CSV gerado');
+}catch(e){
+  console.error(e);
+  alert('Não foi possível gerar o CSV: '+e.message);
+}
 };
 $('pdfFuture').onclick=()=>toast('PDF com assinaturas entra na versão definitiva.');
 $('reset').onclick=()=>{if(confirm('Apagar dados de teste?')){localStorage.removeItem(KEY);location.reload()}};
