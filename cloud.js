@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.10.1';
+const VERSION='0.10.2';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -92,11 +92,21 @@ overlay.innerHTML=`
     <button id="cloudLogout" class="secondary" style="margin-top:8px">Sair da conta</button>
   </div>
 
+  <div class="card" style="margin-top:12px">
+    <b>Preferências</b>
+    <label>Formato de horário</label>
+    <select id="cloudHourFormat"><option value="24">24 horas (17:30)</option><option value="12">12 horas (5:30 PM)</option></select>
+  </div>
   <div id="cloudStatus" class="small muted" style="margin-top:12px">Verificando sessão...</div>
 </div>`;
 document.body.appendChild(overlay);
+const cloudHourFormat=document.getElementById('cloudHourFormat');
+if(cloudHourFormat){
+  cloudHourFormat.value=window.pcHourFormat?window.pcHourFormat():'24';
+  cloudHourFormat.onchange=e=>{if(window.pcSetHourFormat)window.pcSetHourFormat(e.target.value)};
+}
 
-account.onclick=()=>overlay.classList.remove('hidden');
+account.onclick=()=>{if(cloudHourFormat&&window.pcHourFormat)cloudHourFormat.value=window.pcHourFormat();overlay.classList.remove('hidden')};
 document.getElementById('accessGateLogin').onclick=()=>{accessGate.classList.add('hidden');overlay.classList.remove('hidden')};
 document.getElementById('cloudClose').onclick=async()=>{
   overlay.classList.add('hidden');
@@ -780,7 +790,7 @@ document.getElementById('savePunch').onclick=saveCloudPunch;
 function correctionToLocal(a,localEmployeeId){
   return {
     id:a.id,employeeId:localEmployeeId,type:a.requested_type,
-    time:new Date(a.requested_time).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+    time:window.pcFormatTime?window.pcFormatTime(a.requested_time):new Date(a.requested_time).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
     requestedTime:a.requested_time,reason:a.reason,note:a.note||'',
     originalPunchId:a.original_punch_id||null,
     status:a.status,createdAt:a.requested_at,decidedAt:a.decided_at||null
@@ -816,7 +826,7 @@ window.pcOpenCorrection=function(punchId){
     document.getElementById('aType').value=p.type;
     const d=new Date(p.deviceTime);
     document.getElementById('aDate').value=d.toLocaleDateString('en-CA');
-    document.getElementById('aTime').value=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('aTime').value=window.pcClockFromDate?window.pcClockFromDate(p.deviceTime):d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     document.getElementById('aReason').value='Horário incorreto';
     original.textContent='Batida original: '+p.type+' · '+d.toLocaleDateString('pt-BR')+' · '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     original.classList.remove('hidden');
@@ -832,7 +842,9 @@ window.pcSendAdjustment=async function(){
   if(currentRole!=='employee'||!currentEmployeeCloudId){toast('Entre como empregado.');return}
   if(!navigator.onLine){toast('Solicitações de ajuste precisam de internet nesta versão.');return}
   const date=document.getElementById('aDate')?.value||new Date().toISOString().slice(0,10);
-  const time=document.getElementById('aTime').value;
+  const rawTime=document.getElementById('aTime').value;
+  const time=window.pcParseClockValue?window.pcParseClockValue(rawTime):rawTime;
+  if(!time){toast(window.pcHourFormat&&window.pcHourFormat()==='12'?'Use um horário como 5:30 PM.':'Use um horário como 17:30.');return}
   const requested=new Date(date+'T'+time+':00');
   if(Number.isNaN(requested.getTime())){toast('Informe data e horário válidos.');return}
   try{
