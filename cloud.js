@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.11.1';
+const VERSION='0.11.2';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -543,9 +543,13 @@ async function loadCalendarEventsForEmployee(){
   st.calendarEvents=(data||[]).map(x=>calendarEventToLocal(x,'e1'));
   save();render();
 }
-window.pcCreateCalendarEvent=async function(e,date,type,note){
+window.pcCreateCalendarEvent=async function(e,date,endDate,type,note){
   if(!(currentRole==='owner'||currentRole==='admin')||!e?.cloudId)throw new Error('Ação não autorizada.');
-  const {error}=await sb.from('calendar_events').insert({household_id:householdId,employee_id:e.cloudId,event_date:date,event_type:type,note:note||null});
+  const rows=[];
+  for(let d=new Date(date+'T12:00:00'),end=new Date((endDate||date)+'T12:00:00');d<=end;d.setDate(d.getDate()+1)){
+    rows.push({household_id:householdId,employee_id:e.cloudId,event_date:d.toLocaleDateString('en-CA'),event_type:type,note:note||null});
+  }
+  const {error}=await sb.from('calendar_events').upsert(rows,{onConflict:'employee_id,event_date,event_type'});
   if(error)throw error;
   await loadEmployerCloudData();
 };
@@ -634,7 +638,7 @@ async function queueOfflinePunch(){
     latitude:loc?.lat??null,longitude:loc?.lon??null,accuracy_m:loc?.acc??null,
     distance_to_workplace_m:c.d,location_status:c.text,
     estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
-    photo_path:path,installation_id:inst(),app_version:'0.11.1',
+    photo_path:path,installation_id:inst(),app_version:'0.11.2',
     platform:navigator.userAgent.slice(0,500),was_offline:true,
     offline_captured_at:now.toISOString()
   };
@@ -807,7 +811,7 @@ async function saveCloudPunch(){
       estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
       photo_path:path,
       installation_id:inst(),
-      app_version:'0.11.1',
+      app_version:'0.11.2',
       platform:navigator.userAgent.slice(0,500),
       was_offline:false
     };
