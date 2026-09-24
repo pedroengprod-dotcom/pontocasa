@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.11.2</title>
+<title>PontoCasa v0.11.3</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -409,9 +409,14 @@ $('teamToday').innerHTML=st.employees.map(e=>{const ps=st.punches.filter(x=>x.em
 const allPending=st.employees.flatMap(e=>pendingIssuesForEmployee(e).map(x=>({...x,employee:e})));
 const missingPending=allPending.filter(x=>x.kind==='missing_punch');
 const configPending=allPending.filter(x=>x.kind==='configuration');
-if($('todayPendingSummary'))$('todayPendingSummary').innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div><b>Pendências</b><div class="small muted">${missingPending.length} dia(s) com batida esperada não registrada${configPending.length?' · '+configPending.length+' cadastro(s) incompleto(s)':''}</div></div><span class="status ${allPending.length?'warn':'ok'}">${allPending.length}</span></div>${allPending.slice(0,3).map(x=>`<div class="small" style="margin-top:7px"><b>${x.employee.name}</b> · ${x.date?new Date(x.date+'T12:00:00').toLocaleDateString('pt-BR'):x.message}${x.missing?.length?' · faltando: '+x.missing.map(m=>m.type).join(', '):''}</div>`).join('')}</div>`;
-if($('morePendings'))$('morePendings').innerHTML=`<div class="card"><b>Central de pendências</b><div class="small muted" style="margin-top:4px">O sistema não cria batidas automaticamente. A pendência desaparece quando houver registro válido ou correção aprovada.</div></div>${allPending.map(x=>`<div class="card"><div style="display:flex;justify-content:space-between;gap:8px"><div><b>${x.employee.name}</b><div class="small muted">${x.date?new Date(x.date+'T12:00:00').toLocaleDateString('pt-BR'):x.message}</div>${x.missing?.length?`<div class="small" style="margin-top:5px">Faltando: ${x.missing.map(m=>m.type+' '+formatClockValue(m.time)).join(' · ')}</div>`:''}</div><span class="status warn">${x.kind==='configuration'?'Cadastro':'Ponto'}</span></div></div>`).join('')||'<div class="card"><span class="status ok">Sem pendências</span></div>';
-
+if($('todayPendingSummary')){
+  const preview=allPending.slice(0,3).map(x=>'<div class="small" style="margin-top:7px"><b>'+x.employee.name+'</b> · '+(x.date?new Date(x.date+'T12:00:00').toLocaleDateString('pt-BR'):x.message)+(x.missing?.length?' · faltando: '+x.missing.map(m=>m.type).join(', '):'')+'</div>').join('');
+  $('todayPendingSummary').innerHTML='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div><b>Pendências</b><div class="small muted">'+missingPending.length+' dia(s) com batida esperada não registrada'+(configPending.length?' · '+configPending.length+' cadastro(s) incompleto(s)':'')+'</div></div><span class="status '+(allPending.length?'warn':'ok')+'">'+allPending.length+'</span></div>'+preview+'</div>';
+}
+if($('morePendings')){
+  const items=allPending.map(x=>'<div class="card"><div style="display:flex;justify-content:space-between;gap:8px"><div><b>'+x.employee.name+'</b><div class="small muted">'+(x.date?new Date(x.date+'T12:00:00').toLocaleDateString('pt-BR'):x.message)+'</div>'+(x.missing?.length?'<div class="small" style="margin-top:5px">Faltando: '+x.missing.map(m=>m.type+' '+formatClockValue(m.time)).join(' · ')+'</div>':'')+'</div><span class="status warn">'+(x.kind==='configuration'?'Cadastro':'Ponto')+'</span></div></div>').join('');
+  $('morePendings').innerHTML='<div class="card"><b>Central de pendências</b><div class="small muted" style="margin-top:4px">O sistema não cria batidas automaticamente. A pendência desaparece quando houver registro válido ou correção aprovada.</div></div>'+(items||'<div class="card"><span class="status ok">Sem pendências</span></div>');
+}
 $('teamList').innerHTML=st.employees.map(e=>`<div class="row"><button data-edit="${e.id}"><b>${e.name}</b><div class="small muted">CPF ${e.cpf||'não informado'} · ${e.role}</div></button><span>›</span></div>`).join('');document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editEmp(b.dataset.edit));
 if($('calEmployee')){
   const previous=$('calEmployee').value||calendarEmployeeId||st.employees[0]?.id;
