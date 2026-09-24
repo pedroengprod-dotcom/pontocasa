@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.11.1</title>
+<title>PontoCasa v0.11.2</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -88,9 +88,10 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <div class="card">
   <b>Ocorrência no calendário</b>
   <div class="grid2" style="margin-top:8px">
-    <div><label>Data</label><input id="calEventDate" type="date"></div>
-    <div><label>Tipo</label><select id="calEventType"><option value="Ferias">Férias</option><option value="Afastamento">Afastamento</option><option value="Folga extraordinaria">Folga extraordinária</option><option value="Feriado/dispensa">Feriado / dispensa</option></select></div>
+    <div><label>Data inicial</label><input id="calEventDate" type="date"></div>
+    <div><label>Data final (opcional)</label><input id="calEventEndDate" type="date"></div>
   </div>
+  <label>Tipo</label><select id="calEventType"><option value="Ferias">Férias</option><option value="Afastamento">Afastamento</option><option value="Folga extraordinaria">Folga extraordinária</option><option value="Feriado/dispensa">Feriado / dispensa</option></select>
   <label>Observação</label><input id="calEventNote" placeholder="Opcional">
   <button id="saveCalEvent" class="secondary" style="margin-top:10px">Registrar ocorrência</button>
 </div>
@@ -548,9 +549,11 @@ $('saveSchedule').onclick=async()=>{
 const e=emp(editing);if(!e){toast('Salve o empregado primeiro');return}
 const newSched={};let invalidTime=false;document.querySelectorAll('#scheduleEditor .day').forEach(r=>{const works=r.querySelector('.works').checked;const vals=['start','bs','be','end'].map(c=>r.querySelector('.'+c).value.trim());const parsed=vals.map(v=>v?parseClockValue(v):'');if(works&&parsed.some((v,i)=>vals[i]&&!v))invalidTime=true;newSched[r.dataset.day]={works,start:parsed[0]||'',bs:parsed[1]||'',be:parsed[2]||'',end:parsed[3]||''}});if(invalidTime){toast(hourFormat()==='24'?'Use horários como 08:00 ou 17:30.':'Use horários como 8:00 AM ou 5:30 PM.');return}
 const reference=scheduleSnapshot?JSON.parse(scheduleSnapshot):(scheduleForDate(e,localDateKey(new Date()))||e.schedule||baseSched);const changedDays=[];const names=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];for(let i=0;i<7;i++){if(JSON.stringify(reference[i])!==JSON.stringify(newSched[i]))changedDays.push(names[i])}
-if(!changedDays.length){toast('Nenhuma alteração identificada.');setScheduleEdit(false);return}
 const validFrom=$('scheduleValidFrom').value;if(!validFrom){toast('Informe a data de início da nova vigência.');return}
-if(!confirm(`Salvar nova jornada válida a partir de ${new Date(validFrom+'T12:00:00').toLocaleDateString('pt-BR')}? Dias alterados: ${changedDays.join(', ')}.`))return;
+const currentVersion=scheduleVersionForDate(e,localDateKey(new Date()));
+if(!changedDays.length&&currentVersion?.validFrom===validFrom){toast('Nenhuma alteração identificada.');setScheduleEdit(false);return}
+const changeText=changedDays.length?'Dias alterados: '+changedDays.join(', ')+'.':'A mesma jornada será registrada para uma nova vigência histórica.';
+if(!confirm(`Salvar jornada válida a partir de ${new Date(validFrom+'T12:00:00').toLocaleDateString('pt-BR')}? ${changeText}`))return;
 try{if(window.pcSaveScheduleVersion&&e.cloudId){await window.pcSaveScheduleVersion(e,newSched,validFrom)}else{e.schedule=newSched;e.scheduleHistory=e.scheduleHistory||[];e.scheduleHistory.push({validFrom,validTo:null,schedule:newSched});save();render()}scheduleSnapshot=null;setScheduleEdit(false);toast('Nova vigência da jornada salva')}catch(err){console.error(err);alert('Não foi possível salvar a jornada: '+err.message)}
 };
 
@@ -580,7 +583,7 @@ document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.quer
 if($('hourFormatSetting'))$('hourFormatSetting').onchange=e=>setHourFormat(e.target.value);
 if($('calEmployee'))$('calEmployee').onchange=e=>{calendarEmployeeId=e.target.value;render()};
 if($('calEventDate')&&!$('calEventDate').value)$('calEventDate').value=localDateKey(new Date());
-if($('saveCalEvent'))$('saveCalEvent').onclick=async()=>{const e=emp(calendarEmployeeId||st.employees[0]?.id);if(!e)return;const date=$('calEventDate').value,type=$('calEventType').value,note=$('calEventNote').value.trim();if(!date){toast('Informe a data.');return}try{if(window.pcCreateCalendarEvent&&e.cloudId)await window.pcCreateCalendarEvent(e,date,type,note);else{st.calendarEvents.push({id:uid(),employeeId:e.id,date,type,note});save();render()}$('calEventNote').value='';toast('Ocorrência registrada')}catch(err){console.error(err);alert('Não foi possível registrar a ocorrência: '+err.message)}};
+if($('saveCalEvent'))$('saveCalEvent').onclick=async()=>{const e=emp(calendarEmployeeId||st.employees[0]?.id);if(!e)return;const date=$('calEventDate').value,endDate=$('calEventEndDate').value||date,type=$('calEventType').value,note=$('calEventNote').value.trim();if(!date){toast('Informe a data inicial.');return}if(endDate<date){toast('A data final não pode ser anterior à inicial.');return}try{if(window.pcCreateCalendarEvent&&e.cloudId)await window.pcCreateCalendarEvent(e,date,endDate,type,note);else{for(let d=new Date(date+'T12:00:00'),end=new Date(endDate+'T12:00:00');d<=end;d.setDate(d.getDate()+1))st.calendarEvents.push({id:uid(),employeeId:e.id,date:d.toLocaleDateString('en-CA'),type,note});save();render()}$('calEventNote').value='';$('calEventEndDate').value='';toast(date===endDate?'Ocorrência registrada':'Período registrado no calendário')}catch(err){console.error(err);alert('Não foi possível registrar a ocorrência: '+err.message)}};
 if($('calMonth'))$('calMonth').onchange=e=>{calendarMonth=e.target.value;render()};
 $('applyPeriod').onclick=()=>{reportRange.from=$('reportFrom').value||null;reportRange.to=$('reportTo').value||null;render();toast('Período aplicado')};
 
