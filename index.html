@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.10</title>
+<title>PontoCasa v0.10.1</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -161,7 +161,7 @@ function fmtDateTimeLocal(s){if(!s)return'';const d=new Date(s);return d.toLocal
 function tzName(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'Horário local'}catch(e){return'Horário local'}}
 
 function localDateKey(s){return new Date(s).toLocaleDateString('en-CA')}
-function hmToMin(v){if(!v||!/^[0-2]\d:[0-5]\d$/.test(v))return null;const [h,m]=v.split(':').map(Number);return h*60+m}
+function hmToMin(v){if(!v)return null;const m=String(v).match(/^([0-2]\d):([0-5]\d)(?::[0-5]\d)?$/);if(!m)return null;return Number(m[1])*60+Number(m[2])}
 function durMin(a,b){const x=hmToMin(a),y=hmToMin(b);return x==null||y==null?0:Math.max(0,y-x)}
 function fmtMin(m){
   if(m==null)return'—';
