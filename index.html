@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.11</title>
+<title>PontoCasa v0.11.1</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -257,6 +257,8 @@ function missingPunchesForDay(e,dateKey){
 function pendingIssuesForEmployee(e){
   if(!e.admission)return [{kind:'configuration',employeeId:e.id,date:null,missing:[],message:'Cadastre a data de admissão para ativar o controle automático de pendências.'}];
   const today=localDateKey(new Date()),start=new Date(e.admission+'T12:00:00'),end=new Date(today+'T12:00:00'),issues=[];
+  const hist=(e.scheduleHistory||[]).slice().sort((a,b)=>String(a.validFrom).localeCompare(String(b.validFrom)));
+  if(hist.length&&e.admission<hist[0].validFrom)issues.push({kind:'configuration',employeeId:e.id,date:null,missing:[],message:'Existe um período entre a admissão e a primeira jornada cadastrada. Cadastre a vigência histórica para apurar esse intervalo.'});
   for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
     const key=d.toLocaleDateString('en-CA');
     const miss=missingPunchesForDay(e,key);
@@ -387,12 +389,12 @@ const emp=id=>st.employees.find(x=>x.id===id);
 function approvedCorrectionForPunch(punchId){return st.adjustments.find(a=>a.originalPunchId===punchId&&a.status==='Aprovado')}
 function renderEmp(){
 const e=st.employees[0],today=localDateKey(new Date()),s=scheduleForDate(e,today)?.[new Date().getDay()]||{works:false,start:'',bs:'',be:'',end:''};
-const ps=st.punches.filter(x=>x.employeeId===e.id&&x.deviceTime.slice(0,10)===today).sort((a,b)=>a.deviceTime.localeCompare(b.deviceTime));
+const ps=st.punches.filter(x=>x.employeeId===e.id&&localDateKey(x.deviceTime)===today).sort((a,b)=>a.deviceTime.localeCompare(b.deviceTime));
 $('scheduleToday').textContent=s.works?s.start+'–'+s.bs+' / '+s.be+'–'+s.end:'Folga';
 const seq=['Entrada','Início do intervalo','Fim do intervalo','Saída'],times=[s.start,s.bs,s.be,s.end],i=Math.min(ps.length,3);
 $('nextPunch').textContent=seq[i]+(times[i]?' · '+times[i]:'');
 $('countToday').textContent=ps.length;
-$('pending').textContent=st.adjustments.filter(x=>x.employeeId===e.id&&x.status==='Pendente').length;
+$('pending').textContent=st.adjustments.filter(x=>x.employeeId===e.id&&x.status==='Pendente').length+pendingIssuesForEmployee(e).filter(x=>x.kind==='missing_punch').length;
 $('recent').innerHTML=ps.slice(-4).reverse().map(p=>{const c=approvedCorrectionForPunch(p.id);return `<div class="row"><div><b>${p.type}</b><div class="small muted">${fmtT(p.deviceTime)}${c?' · corrigido para '+c.type+' '+c.time:''}</div></div><span class="status ${p.status.startsWith('Dentro')?'ok':p.status.startsWith('Fora')?'bad':'warn'}">${p.status}</span></div>`}).join('')||'<div class="small muted">Nenhuma marcação hoje.</div>';
 $('history').innerHTML=st.punches.filter(x=>x.employeeId===e.id).sort((a,b)=>b.deviceTime.localeCompare(a.deviceTime)).map(p=>{const c=approvedCorrectionForPunch(p.id);return `<button class="row" style="width:100%;background:white;text-align:left" data-correct-punch="${p.id}"><div><b>${p.type}</b><div class="small muted">Original: ${fmtD(p.deviceTime)} · ${fmtT(p.deviceTime)}</div>${c?`<div class="small" style="color:var(--good);margin-top:3px"><b>Correção aprovada:</b> ${c.type} · ${fmtD(c.requestedTime)} · ${c.time}</div>`:''}</div><span class="status">${c?'Corrigida':p.status}</span></button>`}).join('')||'<div class="card muted">Sem marcações.</div>';
 document.querySelectorAll('[data-correct-punch]').forEach(b=>b.onclick=()=>window.pcOpenCorrection?.(b.dataset.correctPunch));
@@ -401,8 +403,8 @@ if($('employeeAdjustmentHistory')){$('employeeAdjustmentHistory').innerHTML=st.a
 
 function inRange(p){const d=p.deviceTime.slice(0,10);return (!reportRange.from||d>=reportRange.from)&&(!reportRange.to||d<=reportRange.to)}
 function renderEr(){
-const todayKey=new Date().toISOString().slice(0,10);
-$('teamToday').innerHTML=st.employees.map(e=>{const ps=st.punches.filter(x=>x.employeeId===e.id&&x.deviceTime.slice(0,10)===todayKey).sort((a,b)=>a.deviceTime.localeCompare(b.deviceTime));return `<div class="card"><b>${e.name}</b><div style="margin-top:8px">${ps.length?ps.map(p=>{const c=approvedCorrectionForPunch(p.id);return `<button class="row" style="width:100%;background:white" data-detail="${p.id}"><div><b>${p.type} · ${fmtT(p.deviceTime)}</b>${c?`<div class="small" style="color:var(--good)">Correção aprovada: ${c.type} · ${c.time}</div>`:''}<div class="small muted">${p.status}</div></div><span>›</span></button>`}).join(''):'<div class="small muted">Sem marcações hoje.</div>'}</div></div>`}).join('');document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
+const todayKey=localDateKey(new Date());
+$('teamToday').innerHTML=st.employees.map(e=>{const ps=st.punches.filter(x=>x.employeeId===e.id&&localDateKey(x.deviceTime)===todayKey).sort((a,b)=>a.deviceTime.localeCompare(b.deviceTime));return `<div class="card"><b>${e.name}</b><div style="margin-top:8px">${ps.length?ps.map(p=>{const c=approvedCorrectionForPunch(p.id);return `<button class="row" style="width:100%;background:white" data-detail="${p.id}"><div><b>${p.type} · ${fmtT(p.deviceTime)}</b>${c?`<div class="small" style="color:var(--good)">Correção aprovada: ${c.type} · ${c.time}</div>`:''}<div class="small muted">${p.status}</div></div><span>›</span></button>`}).join(''):'<div class="small muted">Sem marcações hoje.</div>'}</div></div>`}).join('');document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
 const allPending=st.employees.flatMap(e=>pendingIssuesForEmployee(e).map(x=>({...x,employee:e})));
 const missingPending=allPending.filter(x=>x.kind==='missing_punch');
 const configPending=allPending.filter(x=>x.kind==='configuration');
