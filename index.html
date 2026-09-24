@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.10.2</title>
+<title>PontoCasa v0.11</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -75,7 +75,7 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <div class="card"><b>Histórico de ajustes</b><div id="employeeAdjustmentHistory" style="margin-top:10px"></div></div>
 </section>
 
-<section id="erToday" class="screen"><h1 class="title">Hoje</h1><div class="sub">Equipe e divergências.</div><div id="teamToday"></div><div id="detail" class="card hidden"></div></section>
+<section id="erToday" class="screen"><h1 class="title">Hoje</h1><div class="sub">Equipe e divergências.</div><div id="todayPendingSummary"></div><div id="teamToday"></div><div id="detail" class="card hidden"></div></section>
 <section id="erCal" class="screen">
 <h1 class="title">Calendário</h1>
 <div class="sub">Apuração diária com base na jornada cadastrada e nas marcações consideradas após correções aprovadas.</div>
@@ -84,6 +84,15 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
     <div><label>Empregado</label><select id="calEmployee"></select></div>
     <div><label>Mês</label><input id="calMonth" type="month"></div>
   </div>
+</div>
+<div class="card">
+  <b>Ocorrência no calendário</b>
+  <div class="grid2" style="margin-top:8px">
+    <div><label>Data</label><input id="calEventDate" type="date"></div>
+    <div><label>Tipo</label><select id="calEventType"><option value="Ferias">Férias</option><option value="Afastamento">Afastamento</option><option value="Folga extraordinaria">Folga extraordinária</option><option value="Feriado/dispensa">Feriado / dispensa</option></select></div>
+  </div>
+  <label>Observação</label><input id="calEventNote" placeholder="Opcional">
+  <button id="saveCalEvent" class="secondary" style="margin-top:10px">Registrar ocorrência</button>
 </div>
 <div id="calSummary"></div>
 <div id="calDays"></div>
@@ -108,8 +117,11 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 
 <div class="card">
 <div class="section-head"><h3>Jornada dia a dia</h3><button id="editSchedule" class="secondary">Editar jornada</button></div>
-<div id="scheduleEditor" class="days"></div>
-<div id="scheduleEditActions" class="grid2 hidden" style="margin-top:10px"><button id="saveSchedule" class="primary">Salvar jornada</button><button id="cancelScheduleEdit" class="secondary">Cancelar</button></div>
+<div id="scheduleCurrentInfo" class="small muted" style="margin-bottom:8px"></div>
+<label>Alteração válida a partir de</label><input id="scheduleValidFrom" type="date" disabled>
+<div id="scheduleEditor" class="days" style="margin-top:10px"></div>
+<div id="scheduleEditActions" class="grid2 hidden" style="margin-top:10px"><button id="saveSchedule" class="primary">Salvar nova vigência</button><button id="cancelScheduleEdit" class="secondary">Cancelar</button></div>
+<div class="note" style="margin-top:10px"><b>Histórico de vigências</b><div id="scheduleHistory" style="margin-top:6px"></div></div>
 </div>
 
 <div class="card">
@@ -131,13 +143,14 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 
 <section id="erMore" class="screen">
 <h1 class="title">Mais</h1>
-<div class="pillbar"><button class="active" data-more="reports">Relatórios</button><button data-more="adjustments">Correções</button><button data-more="settings">Configurações</button></div>
+<div class="pillbar"><button class="active" data-more="reports">Relatórios</button><button data-more="pendings">Pendências</button><button data-more="adjustments">Correções</button><button data-more="settings">Configurações</button></div>
 <div id="moreReports">
 <div class="card"><b>Relatório por período</b><div class="grid3" style="margin-top:10px"><div><label>De</label><input id="reportFrom" type="date"></div><div><label>Até</label><input id="reportTo" type="date"></div><div style="display:flex;align-items:end"><button id="applyPeriod" class="secondary">Aplicar</button></div></div><div class="grid2" style="margin-top:10px"><button id="csv" class="secondary">Exportar CSV</button><button id="pdfFuture" class="secondary">PDF (versão definitiva)</button></div><div class="note" style="margin-top:10px">Na versão definitiva, o PDF terá espaço/fluxo para assinatura do empregador e do empregado.</div></div>
 <div id="reportHoursSummary" style="margin-bottom:12px"></div>
 <div class="card"><b>Apuração diária do período</b><div class="tablewrap" style="margin-top:10px"><table style="min-width:900px"><thead><tr><th>Empregado</th><th>Data</th><th>Previsto</th><th>Trabalhado</th><th>Horas a mais</th><th>Horas pendentes</th><th>Saldo</th><th>Situação</th></tr></thead><tbody id="hoursRows"></tbody></table></div></div>
 <div class="card"><b>Registros e evidências</b><div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Empregado</th><th>Situação</th><th>Data considerada</th><th>Tipo considerado</th><th>Horário considerado</th><th>Registro original</th><th>Correção aprovada</th><th>Hora servidor</th><th>Status localização</th><th>Distância</th><th>Precisão</th><th>Endereço estimado</th><th>Coordenadas</th><th>Foto</th><th>Mapa</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </div>
+<div id="morePendings" class="hidden"></div>
 <div id="moreAdjustments" class="hidden"></div>
 <div id="moreSettings" class="hidden">
 <div class="card"><b>Preferências</b><label>Formato de horário</label><select id="hourFormatSetting"><option value="24">24 horas (17:30)</option><option value="12">12 horas (5:30 PM)</option></select><div class="small muted" style="margin-top:6px">O padrão do PontoCasa no Brasil é 24 horas. Esta preferência fica salva neste aparelho.</div></div>
@@ -156,7 +169,8 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <script>
 const KEY='pontocasa-v05';
 const baseSched={0:{works:false,start:'',bs:'',be:'',end:''},1:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},2:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},3:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},4:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},5:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},6:{works:false,start:'',bs:'',be:'',end:''}};
-let st=JSON.parse(localStorage.getItem(KEY)||'null')||{employees:[{id:'e1',name:'Maria',cpf:'000.000.000-00',pis:'',contact:'',admission:'',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],punches:[],adjustments:[]};
+let st=JSON.parse(localStorage.getItem(KEY)||'null')||{employees:[{id:'e1',name:'Maria',cpf:'000.000.000-00',pis:'',contact:'',admission:'',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),scheduleHistory:[],workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],punches:[],adjustments:[],calendarEvents:[]};
+st.calendarEvents=st.calendarEvents||[];
 let photo=null,loc=null,editing='e1',employeeSnapshot=null,scheduleSnapshot=null,workSnapshot=null,reportRange={from:null,to:null};
 let calendarMonth=new Date().toLocaleDateString('en-CA').slice(0,7),calendarEmployeeId=null;
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(st)),uid=()=>crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random(),fmtD=s=>new Date(s).toLocaleDateString('pt-BR');
@@ -193,13 +207,62 @@ function fmtMin(m){
   const n=Math.abs(Math.round(m)),h=Math.floor(n/60),mm=n%60;
   return sign+h+'h'+String(mm).padStart(2,'0');
 }
+function scheduleVersionForDate(e,dateKey){
+  const h=(e.scheduleHistory||[]).slice().sort((a,b)=>String(a.validFrom).localeCompare(String(b.validFrom)));
+  if(h.length){
+    const matches=h.filter(v=>v.validFrom<=dateKey&&(!v.validTo||v.validTo>=dateKey));
+    return matches.length?matches[matches.length-1]:null;
+  }
+  return e.schedule?{validFrom:e.admission||dateKey,validTo:null,schedule:e.schedule}:null;
+}
+function scheduleForDate(e,dateKey){return scheduleVersionForDate(e,dateKey)?.schedule||null}
+function calendarEventsForDate(employeeId,dateKey){return (st.calendarEvents||[]).filter(x=>x.employeeId===employeeId&&x.date===dateKey)}
+function expectedPunchesForDay(e,dateKey){
+  const s=scheduleForDate(e,dateKey),d=new Date(dateKey+'T12:00:00'),day=s?.[d.getDay()];
+  if(!day?.works)return[];
+  const out=[];
+  if(day.start)out.push({type:'Entrada',time:day.start});
+  if(day.bs)out.push({type:'Início do intervalo',time:day.bs});
+  if(day.be)out.push({type:'Fim do intervalo',time:day.be});
+  if(day.end)out.push({type:'Saída',time:day.end});
+  return out;
+}
 function scheduleMinutes(e,dateKey){
+  if(e.admission&&dateKey<e.admission)return 0;
+  if(calendarEventsForDate(e.id,dateKey).length)return 0;
   const d=new Date(dateKey+'T12:00:00');
-  const s=e.schedule?.[d.getDay()];
+  const s=scheduleForDate(e,dateKey)?.[d.getDay()];
   if(!s?.works)return 0;
   if(s.start&&s.bs&&s.be&&s.end)return durMin(s.start,s.bs)+durMin(s.be,s.end);
   if(s.start&&s.end)return durMin(s.start,s.end);
   return 0;
+}
+function missingPunchesForDay(e,dateKey){
+  if(!e.admission||dateKey<e.admission||calendarEventsForDate(e.id,dateKey).length)return[];
+  const expected=expectedPunchesForDay(e,dateKey);
+  if(!expected.length)return[];
+  const ev=effectiveEventsForEmployee(e.id).filter(x=>localDateKey(x.time)===dateKey);
+  const present=new Set(ev.map(x=>x.type));
+  const today=localDateKey(new Date());
+  const now=new Date(),nowMin=now.getHours()*60+now.getMinutes();
+  return expected.filter(x=>{
+    if(dateKey>today)return false;
+    if(dateKey===today){
+      const t=hmToMin(x.time);
+      if(t!=null&&t>nowMin)return false;
+    }
+    return !present.has(x.type);
+  });
+}
+function pendingIssuesForEmployee(e){
+  if(!e.admission)return [{kind:'configuration',employeeId:e.id,date:null,missing:[],message:'Cadastre a data de admissão para ativar o controle automático de pendências.'}];
+  const today=localDateKey(new Date()),start=new Date(e.admission+'T12:00:00'),end=new Date(today+'T12:00:00'),issues=[];
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    const key=d.toLocaleDateString('en-CA');
+    const miss=missingPunchesForDay(e,key);
+    if(miss.length)issues.push({kind:'missing_punch',employeeId:e.id,date:key,missing:miss,message:'Batida esperada não registrada'});
+  }
+  return issues;
 }
 function effectiveEventsForEmployee(employeeId){
   const out=[];
@@ -213,14 +276,18 @@ function effectiveEventsForEmployee(employeeId){
   return out.sort((a,b)=>new Date(a.time)-new Date(b.time));
 }
 function dayHours(employee,dateKey){
+  if(employee.admission&&dateKey<employee.admission)return {dateKey,planned:0,worked:null,balance:null,extra:null,pending:null,status:'Antes da admissão',events:[],missing:[],calendarEvents:[]};
+  const calEvents=calendarEventsForDate(employee.id,dateKey);
+  if(calEvents.length)return {dateKey,planned:0,worked:0,balance:0,extra:0,pending:0,status:calEvents.map(x=>x.type).join(' / '),events:[],missing:[],calendarEvents:calEvents};
   const planned=scheduleMinutes(employee,dateKey);
   const ev=effectiveEventsForEmployee(employee.id).filter(x=>localDateKey(x.time)===dateKey);
+  const missing=missingPunchesForDay(employee,dateKey);
   const first=t=>ev.find(x=>x.type===t);
   const last=t=>[...ev].reverse().find(x=>x.type===t);
   const entrada=first('Entrada'),saida=last('Saída'),bs=first('Início do intervalo'),be=last('Fim do intervalo');
   let worked=null,status='Sem marcação';
   if(ev.length){
-    const sch=employee.schedule?.[new Date(dateKey+'T12:00:00').getDay()];
+    const sch=scheduleForDate(employee,dateKey)?.[new Date(dateKey+'T12:00:00').getDay()];
     const expectsBreak=!!(sch?.works&&sch.bs&&sch.be);
     if(entrada&&saida&&(!expectsBreak||(bs&&be))){
       if(expectsBreak){
@@ -232,7 +299,7 @@ function dayHours(employee,dateKey){
     }else status='Marcações incompletas';
   }else if(planned===0)status='Folga/sem jornada prevista';
   const balance=worked==null?null:worked-planned;
-  return {dateKey,planned,worked,balance,extra:balance==null?null:Math.max(0,balance),pending:balance==null?null:Math.max(0,-balance),status,events:ev};
+  return {dateKey,planned,worked,balance,extra:balance==null?null:Math.max(0,balance),pending:balance==null?null:Math.max(0,-balance),status,events:ev,missing,calendarEvents:calEvents};
 }
 function periodDays(employee,from,to){
   if(!from||!to)return[];
@@ -319,7 +386,7 @@ const emp=id=>st.employees.find(x=>x.id===id);
 
 function approvedCorrectionForPunch(punchId){return st.adjustments.find(a=>a.originalPunchId===punchId&&a.status==='Aprovado')}
 function renderEmp(){
-const e=st.employees[0],s=e.schedule[new Date().getDay()]||baseSched[1],today=new Date().toISOString().slice(0,10);
+const e=st.employees[0],today=localDateKey(new Date()),s=scheduleForDate(e,today)?.[new Date().getDay()]||{works:false,start:'',bs:'',be:'',end:''};
 const ps=st.punches.filter(x=>x.employeeId===e.id&&x.deviceTime.slice(0,10)===today).sort((a,b)=>a.deviceTime.localeCompare(b.deviceTime));
 $('scheduleToday').textContent=s.works?s.start+'–'+s.bs+' / '+s.be+'–'+s.end:'Folga';
 const seq=['Entrada','Início do intervalo','Fim do intervalo','Saída'],times=[s.start,s.bs,s.be,s.end],i=Math.min(ps.length,3);
@@ -336,6 +403,12 @@ function inRange(p){const d=p.deviceTime.slice(0,10);return (!reportRange.from||
 function renderEr(){
 const todayKey=new Date().toISOString().slice(0,10);
 $('teamToday').innerHTML=st.employees.map(e=>{const ps=st.punches.filter(x=>x.employeeId===e.id&&x.deviceTime.slice(0,10)===todayKey).sort((a,b)=>a.deviceTime.localeCompare(b.deviceTime));return `<div class="card"><b>${e.name}</b><div style="margin-top:8px">${ps.length?ps.map(p=>{const c=approvedCorrectionForPunch(p.id);return `<button class="row" style="width:100%;background:white" data-detail="${p.id}"><div><b>${p.type} · ${fmtT(p.deviceTime)}</b>${c?`<div class="small" style="color:var(--good)">Correção aprovada: ${c.type} · ${c.time}</div>`:''}<div class="small muted">${p.status}</div></div><span>›</span></button>`}).join(''):'<div class="small muted">Sem marcações hoje.</div>'}</div></div>`}).join('');document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
+const allPending=st.employees.flatMap(e=>pendingIssuesForEmployee(e).map(x=>({...x,employee:e})));
+const missingPending=allPending.filter(x=>x.kind==='missing_punch');
+const configPending=allPending.filter(x=>x.kind==='configuration');
+if($('todayPendingSummary'))$('todayPendingSummary').innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div><b>Pendências</b><div class="small muted">${missingPending.length} dia(s) com batida esperada não registrada${configPending.length?' · '+configPending.length+' cadastro(s) incompleto(s)':''}</div></div><span class="status ${allPending.length?'warn':'ok'}">${allPending.length}</span></div>${allPending.slice(0,3).map(x=>`<div class="small" style="margin-top:7px"><b>${x.employee.name}</b> · ${x.date?new Date(x.date+'T12:00:00').toLocaleDateString('pt-BR'):x.message}${x.missing?.length?' · faltando: '+x.missing.map(m=>m.type).join(', '):''}</div>`).join('')}</div>`;
+if($('morePendings'))$('morePendings').innerHTML=`<div class="card"><b>Central de pendências</b><div class="small muted" style="margin-top:4px">O sistema não cria batidas automaticamente. A pendência desaparece quando houver registro válido ou correção aprovada.</div></div>${allPending.map(x=>`<div class="card"><div style="display:flex;justify-content:space-between;gap:8px"><div><b>${x.employee.name}</b><div class="small muted">${x.date?new Date(x.date+'T12:00:00').toLocaleDateString('pt-BR'):x.message}</div>${x.missing?.length?`<div class="small" style="margin-top:5px">Faltando: ${x.missing.map(m=>m.type+' '+formatClockValue(m.time)).join(' · ')}</div>`:''}</div><span class="status warn">${x.kind==='configuration'?'Cadastro':'Ponto'}</span></div></div>`).join('')||'<div class="card"><span class="status ok">Sem pendências</span></div>';
+
 $('teamList').innerHTML=st.employees.map(e=>`<div class="row"><button data-edit="${e.id}"><b>${e.name}</b><div class="small muted">CPF ${e.cpf||'não informado'} · ${e.role}</div></button><span>›</span></div>`).join('');document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editEmp(b.dataset.edit));
 if($('calEmployee')){
   const previous=$('calEmployee').value||calendarEmployeeId||st.employees[0]?.id;
@@ -359,7 +432,7 @@ if(calEmp){
     <div class="card"><div class="small muted">Saldo de jornada</div><b>${fmtMin(sum.balance)}</b></div>
     <div class="card"><div class="small muted">Banco de horas</div><b>Não configurado</b></div>
   </div>`;
-  $('calDays').innerHTML=days.slice().reverse().map(d=>`<div class="card"><div style="display:flex;justify-content:space-between;gap:10px"><div><b>${new Date(d.dateKey+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})}</b><div class="small muted">${d.status}</div></div><span class="status ${d.status==='Completo'?(d.balance>=0?'ok':'warn'):d.status==='Marcações incompletas'?'bad':''}">${d.balance==null?'—':fmtMin(d.balance)}</span></div><div class="grid3" style="margin-top:10px"><div><div class="small muted">Previsto</div><b>${fmtMin(d.planned)}</b></div><div><div class="small muted">Trabalhado</div><b>${fmtMin(d.worked)}</b></div><div><div class="small muted">Saldo</div><b>${fmtMin(d.balance)}</b></div></div>${d.events.length?`<div class="small muted" style="margin-top:8px">${d.events.map(x=>x.type+' '+fmtT(x.time)+(x.source!=='Original'?' ('+x.source+')':'')).join(' · ')}</div>`:''}</div>`).join('');
+  $('calDays').innerHTML=days.slice().reverse().map(d=>`<div class="card"><div style="display:flex;justify-content:space-between;gap:10px"><div><b>${new Date(d.dateKey+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})}</b><div class="small muted">${d.status}</div></div><span class="status ${d.missing?.length?'bad':d.status==='Completo'?(d.balance>=0?'ok':'warn'):''}">${d.balance==null?'—':fmtMin(d.balance)}</span></div><div class="grid3" style="margin-top:10px"><div><div class="small muted">Previsto</div><b>${fmtMin(d.planned)}</b></div><div><div class="small muted">Trabalhado</div><b>${fmtMin(d.worked)}</b></div><div><div class="small muted">Diferença</div><b>${fmtMin(d.balance)}</b></div></div>${d.missing?.length?`<div class="note" style="margin-top:8px;color:var(--bad)"><b>Batida esperada não registrada:</b> ${d.missing.map(x=>x.type+' '+formatClockValue(x.time)).join(' · ')}</div>`:''}${d.events.length?`<div class="small muted" style="margin-top:8px">${d.events.map(x=>x.type+' '+fmtT(x.time)+(x.source!=='Original'?' ('+x.source+')':'')).join(' · ')}</div>`:''}${d.calendarEvents?.length?`<div class="small" style="margin-top:8px">${d.calendarEvents.map(x=>'<b>'+x.type+'</b>'+(x.note?' · '+x.note:'')+` <button class="secondary" style="width:auto;min-height:30px;padding:4px 8px" data-del-event="${x.id}">Excluir</button>`).join('<br>')}</div>`:''}</div>`).join('');document.querySelectorAll('[data-del-event]').forEach(b=>b.onclick=()=>window.pcDeleteCalendarEvent?.(b.dataset.delEvent));
 }
 function reportEntries(){
   const entries=[];
@@ -437,14 +510,14 @@ function decide(id,status){if(window.pcDecideAdjustment)return window.pcDecideAd
 function schedHtml(s){return ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'].map((n,i)=>{const d=s[i]||baseSched[i];return `<div class="day" data-day="${i}"><div class="dayhead"><b>${n}</b><label style="margin:0;font-weight:500"><input class="works" type="checkbox" ${d.works?'checked':''}> Trabalha</label></div><div class="times"><input class="start" type="text" inputmode="text" placeholder="${hourFormat()==='24'?'08:00':'8:00 AM'}" value="${formatClockValue(d.start)}"><input class="bs" type="text" inputmode="text" placeholder="${hourFormat()==='24'?'12:00':'12:00 PM'}" value="${formatClockValue(d.bs)}"><input class="be" type="text" inputmode="text" placeholder="${hourFormat()==='24'?'13:00':'1:00 PM'}" value="${formatClockValue(d.be)}"><input class="end" type="text" inputmode="text" placeholder="${hourFormat()==='24'?'17:00':'5:00 PM'}" value="${formatClockValue(d.end)}"></div></div>`}).join('')}
 
 function setEmployeeEdit(on){['eName','eCpf','ePis','eContact','eAdmission','eRole'].forEach(id=>$(id).disabled=!on);$('employeeEditActions').classList.toggle('hidden',!on);$('editEmployeeData').classList.toggle('hidden',on)}
-function setScheduleEdit(on){document.querySelectorAll('#scheduleEditor input').forEach(x=>x.disabled=!on);$('scheduleEditActions').classList.toggle('hidden',!on);$('editSchedule').classList.toggle('hidden',on)}
+function setScheduleEdit(on){document.querySelectorAll('#scheduleEditor input').forEach(x=>x.disabled=!on);if($('scheduleValidFrom'))$('scheduleValidFrom').disabled=!on;$('scheduleEditActions').classList.toggle('hidden',!on);$('editSchedule').classList.toggle('hidden',on)}
 function setWorkEdit(on){['addressSearch','searchAddress','wName','useHere','radius'].forEach(id=>$(id).disabled=!on);$('workplaceEditActions').classList.toggle('hidden',!on);$('editWorkplace').classList.toggle('hidden',on)}
 
 function editEmp(id){
 editing=id;const e=emp(id);$('editor').classList.remove('hidden');$('editorTitle').textContent='Dados de '+e.name;
 $('eName').value=e.name;$('eCpf').value=e.cpf||'';$('ePis').value=e.pis||'';$('eContact').value=e.contact||'';$('eAdmission').value=e.admission||'';$('eRole').value=e.role;
 $('wName').value=e.workplace.name;$('wAddress').value=e.workplace.address||'';$('radius').value=e.workplace.radius;$('radiusText').textContent=e.workplace.radius;$('coordText').textContent=e.workplace.lat!=null?'Lat '+e.workplace.lat.toFixed(6)+' · Lon '+e.workplace.lon.toFixed(6):'Coordenadas ainda não definidas';
-$('scheduleEditor').innerHTML=schedHtml(e.schedule);$('addressResults').innerHTML='';
+const currentSchedule=scheduleForDate(e,localDateKey(new Date()))||e.schedule||baseSched;$('scheduleEditor').innerHTML=schedHtml(currentSchedule);if($('scheduleValidFrom'))$('scheduleValidFrom').value=localDateKey(new Date());if($('scheduleCurrentInfo')){const v=scheduleVersionForDate(e,localDateKey(new Date()));$('scheduleCurrentInfo').textContent=v?'Vigência atual desde '+new Date(v.validFrom+'T12:00:00').toLocaleDateString('pt-BR'):'Sem vigência histórica cadastrada';}if($('scheduleHistory'))$('scheduleHistory').innerHTML=(e.scheduleHistory||[]).slice().sort((a,b)=>String(b.validFrom).localeCompare(String(a.validFrom))).map(v=>`<div>${new Date(v.validFrom+'T12:00:00').toLocaleDateString('pt-BR')}${v.validTo?' até '+new Date(v.validTo+'T12:00:00').toLocaleDateString('pt-BR'):' em diante'}</div>`).join('')||'Ainda não há histórico de vigências.';$('addressResults').innerHTML='';
 setEmployeeEdit(false);setScheduleEdit(false);setWorkEdit(false);$('editor').scrollIntoView({behavior:'smooth'})
 }
 
@@ -458,24 +531,25 @@ $('editEmployeeData').onclick=()=>{const e=emp(editing);employeeSnapshot=JSON.st
 $('cancelEmployeeEdit').onclick=()=>{if(editing)editEmp(editing);else $('editor').classList.add('hidden')};
 
 function normalizeDigits(s){return (s||'').replace(/\D/g,'')}
-$('saveEmp').onclick=()=>{
+$('saveEmp').onclick=async()=>{
 const data={name:$('eName').value.trim(),cpf:$('eCpf').value.trim(),pis:$('ePis').value.trim(),contact:$('eContact').value.trim(),admission:$('eAdmission').value,role:$('eRole').value.trim()};
 if(!data.name){toast('Informe o nome.');return}if(normalizeDigits(data.cpf).length!==11){toast('CPF é obrigatório e deve ter 11 dígitos.');return}
 let e=editing?emp(editing):null;
 if(!e){if(!confirm(`Tem certeza que deseja cadastrar ${data.name}?`))return;e={id:uid(),active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}};st.employees.push(e);editing=e.id}
 else{const before=employeeSnapshot?JSON.parse(employeeSnapshot):{name:e.name,cpf:e.cpf||'',pis:e.pis||'',contact:e.contact||'',admission:e.admission||'',role:e.role};const labels={name:'Nome',cpf:'CPF',pis:'PIS',contact:'Contato',admission:'Data de admissão',role:'Função'};const changed=Object.keys(data).filter(k=>(before[k]||'')!==(data[k]||'')).map(k=>labels[k]);if(!changed.length){toast('Nenhuma alteração identificada.');setEmployeeEdit(false);return}if(!confirm(`Tem certeza que deseja ajustar ${changed.join(', ')}?`))return}
-Object.assign(e,data);save();employeeSnapshot=null;setEmployeeEdit(false);render();toast('Dados salvos')
+Object.assign(e,data);save();employeeSnapshot=null;setEmployeeEdit(false);render();if(window.pcSaveEmployeeProfile&&e.cloudId){try{await window.pcSaveEmployeeProfile(e)}catch(err){console.error(err);alert('Os dados ficaram salvos neste aparelho, mas não foi possível sincronizar: '+err.message);return}}toast('Dados salvos')
 };
 
-$('editSchedule').onclick=()=>{const e=emp(editing);scheduleSnapshot=JSON.stringify(e.schedule);setScheduleEdit(true)};
-$('cancelScheduleEdit').onclick=()=>{const e=emp(editing);if(scheduleSnapshot)e.schedule=JSON.parse(scheduleSnapshot);$('scheduleEditor').innerHTML=schedHtml(e.schedule);setScheduleEdit(false);scheduleSnapshot=null};
-$('saveSchedule').onclick=()=>{
+$('editSchedule').onclick=()=>{const e=emp(editing),current=scheduleForDate(e,localDateKey(new Date()))||e.schedule||baseSched;scheduleSnapshot=JSON.stringify(current);$('scheduleValidFrom').value=localDateKey(new Date());setScheduleEdit(true)};
+$('cancelScheduleEdit').onclick=()=>{const e=emp(editing);const current=scheduleSnapshot?JSON.parse(scheduleSnapshot):(scheduleForDate(e,localDateKey(new Date()))||e.schedule||baseSched);$('scheduleEditor').innerHTML=schedHtml(current);setScheduleEdit(false);scheduleSnapshot=null};
+$('saveSchedule').onclick=async()=>{
 const e=emp(editing);if(!e){toast('Salve o empregado primeiro');return}
 const newSched={};let invalidTime=false;document.querySelectorAll('#scheduleEditor .day').forEach(r=>{const works=r.querySelector('.works').checked;const vals=['start','bs','be','end'].map(c=>r.querySelector('.'+c).value.trim());const parsed=vals.map(v=>v?parseClockValue(v):'');if(works&&parsed.some((v,i)=>vals[i]&&!v))invalidTime=true;newSched[r.dataset.day]={works,start:parsed[0]||'',bs:parsed[1]||'',be:parsed[2]||'',end:parsed[3]||''}});if(invalidTime){toast(hourFormat()==='24'?'Use horários como 08:00 ou 17:30.':'Use horários como 8:00 AM ou 5:30 PM.');return}
-const changedDays=[];const names=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];for(let i=0;i<7;i++){if(JSON.stringify(e.schedule[i])!==JSON.stringify(newSched[i]))changedDays.push(names[i])}
+const reference=scheduleSnapshot?JSON.parse(scheduleSnapshot):(scheduleForDate(e,localDateKey(new Date()))||e.schedule||baseSched);const changedDays=[];const names=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];for(let i=0;i<7;i++){if(JSON.stringify(reference[i])!==JSON.stringify(newSched[i]))changedDays.push(names[i])}
 if(!changedDays.length){toast('Nenhuma alteração identificada.');setScheduleEdit(false);return}
-if(!confirm(`Tem certeza que deseja ajustar a jornada de ${changedDays.join(', ')}?`))return;
-e.schedule=newSched;save();scheduleSnapshot=null;setScheduleEdit(false);toast('Jornada salva')
+const validFrom=$('scheduleValidFrom').value;if(!validFrom){toast('Informe a data de início da nova vigência.');return}
+if(!confirm(`Salvar nova jornada válida a partir de ${new Date(validFrom+'T12:00:00').toLocaleDateString('pt-BR')}? Dias alterados: ${changedDays.join(', ')}.`))return;
+try{if(window.pcSaveScheduleVersion&&e.cloudId){await window.pcSaveScheduleVersion(e,newSched,validFrom)}else{e.schedule=newSched;e.scheduleHistory=e.scheduleHistory||[];e.scheduleHistory.push({validFrom,validTo:null,schedule:newSched});save();render()}scheduleSnapshot=null;setScheduleEdit(false);toast('Nova vigência da jornada salva')}catch(err){console.error(err);alert('Não foi possível salvar a jornada: '+err.message)}
 };
 
 $('editWorkplace').onclick=()=>{const e=emp(editing);workSnapshot=JSON.stringify(e.workplace);setWorkEdit(true)};
@@ -500,9 +574,11 @@ e.workplace=after;save();workSnapshot=null;setWorkEdit(false);toast('Local salvo
 
 $('closeEditor').onclick=()=>$('editor').classList.add('hidden');
 
-document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-more]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['Reports','Adjustments','Settings'].forEach(x=>$('more'+x).classList.add('hidden'));$('more'+b.dataset.more[0].toUpperCase()+b.dataset.more.slice(1)).classList.remove('hidden')});
+document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-more]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['Reports','Pendings','Adjustments','Settings'].forEach(x=>$('more'+x).classList.add('hidden'));$('more'+b.dataset.more[0].toUpperCase()+b.dataset.more.slice(1)).classList.remove('hidden')});
 if($('hourFormatSetting'))$('hourFormatSetting').onchange=e=>setHourFormat(e.target.value);
 if($('calEmployee'))$('calEmployee').onchange=e=>{calendarEmployeeId=e.target.value;render()};
+if($('calEventDate')&&!$('calEventDate').value)$('calEventDate').value=localDateKey(new Date());
+if($('saveCalEvent'))$('saveCalEvent').onclick=async()=>{const e=emp(calendarEmployeeId||st.employees[0]?.id);if(!e)return;const date=$('calEventDate').value,type=$('calEventType').value,note=$('calEventNote').value.trim();if(!date){toast('Informe a data.');return}try{if(window.pcCreateCalendarEvent&&e.cloudId)await window.pcCreateCalendarEvent(e,date,type,note);else{st.calendarEvents.push({id:uid(),employeeId:e.id,date,type,note});save();render()}$('calEventNote').value='';toast('Ocorrência registrada')}catch(err){console.error(err);alert('Não foi possível registrar a ocorrência: '+err.message)}};
 if($('calMonth'))$('calMonth').onchange=e=>{calendarMonth=e.target.value;render()};
 $('applyPeriod').onclick=()=>{reportRange.from=$('reportFrom').value||null;reportRange.to=$('reportTo').value||null;render();toast('Período aplicado')};
 
