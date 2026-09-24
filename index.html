@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.10.1</title>
+<title>PontoCasa v0.10.2</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -67,7 +67,7 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
   <div id="adjustmentOriginal" class="note hidden" style="margin-bottom:10px"></div>
   <label>Tipo</label><select id="aType"><option>Entrada</option><option>Início do intervalo</option><option>Fim do intervalo</option><option>Saída</option></select>
   <label>Data</label><input id="aDate" type="date">
-  <label>Horário correto</label><input id="aTime" type="time" value="08:00">
+  <label>Horário correto</label><input id="aTime" type="text" inputmode="text" value="08:00" placeholder="08:00">
   <label>Motivo</label><select id="aReason"><option>Horário incorreto</option><option>Esqueci de registrar</option><option>Celular sem bateria</option><option>Problema técnico</option><option>Outro</option></select>
   <label>Observação</label><input id="aNote" placeholder="Opcional">
   <div class="grid2" style="margin-top:12px"><button id="sendAdj" class="primary">Enviar solicitação</button><button id="cancelAdj" class="secondary">Cancelar</button></div>
@@ -139,7 +139,10 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <div class="card"><b>Registros e evidências</b><div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Empregado</th><th>Situação</th><th>Data considerada</th><th>Tipo considerado</th><th>Horário considerado</th><th>Registro original</th><th>Correção aprovada</th><th>Hora servidor</th><th>Status localização</th><th>Distância</th><th>Precisão</th><th>Endereço estimado</th><th>Coordenadas</th><th>Foto</th><th>Mapa</th></tr></thead><tbody id="rows"></tbody></table></div></div>
 </div>
 <div id="moreAdjustments" class="hidden"></div>
-<div id="moreSettings" class="hidden"><div class="card"><b>Protótipo local</b><div class="small muted">Dados ficam só neste navegador/aparelho. Não use dados reais.</div><button id="reset" class="secondary" style="margin-top:10px;color:var(--bad)">Apagar dados de teste</button></div></div>
+<div id="moreSettings" class="hidden">
+<div class="card"><b>Preferências</b><label>Formato de horário</label><select id="hourFormatSetting"><option value="24">24 horas (17:30)</option><option value="12">12 horas (5:30 PM)</option></select><div class="small muted" style="margin-top:6px">O padrão do PontoCasa no Brasil é 24 horas. Esta preferência fica salva neste aparelho.</div></div>
+<div class="card"><b>Protótipo local</b><div class="small muted">Dados ficam só neste navegador/aparelho. Não use dados reais.</div><button id="reset" class="secondary" style="margin-top:10px;color:var(--bad)">Apagar dados de teste</button></div>
+</div>
 </section>
 
 </main>
@@ -156,8 +159,29 @@ const baseSched={0:{works:false,start:'',bs:'',be:'',end:''},1:{works:true,start
 let st=JSON.parse(localStorage.getItem(KEY)||'null')||{employees:[{id:'e1',name:'Maria',cpf:'000.000.000-00',pis:'',contact:'',admission:'',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],punches:[],adjustments:[]};
 let photo=null,loc=null,editing='e1',employeeSnapshot=null,scheduleSnapshot=null,workSnapshot=null,reportRange={from:null,to:null};
 let calendarMonth=new Date().toLocaleDateString('en-CA').slice(0,7),calendarEmployeeId=null;
-const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(st)),uid=()=>crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random(),fmtT=s=>new Date(s).toLocaleTimeString('pt-BR'),fmtD=s=>new Date(s).toLocaleDateString('pt-BR');
-function fmtDateTimeLocal(s){if(!s)return'';const d=new Date(s);return d.toLocaleString('pt-BR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}
+const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(st)),uid=()=>crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random(),fmtD=s=>new Date(s).toLocaleDateString('pt-BR');
+const HOUR_FORMAT_KEY='pc-hour-format';
+function hourFormat(){return localStorage.getItem(HOUR_FORMAT_KEY)==='12'?'12':'24'}
+function fmtT(s){if(!s)return'';const d=new Date(s);return d.toLocaleTimeString(hourFormat()==='12'?'en-US':'pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:hourFormat()==='12'})}
+function fmtDateTimeLocal(s){if(!s)return'';const d=new Date(s);return d.toLocaleString(hourFormat()==='12'?'en-US':'pt-BR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:hourFormat()==='12'})}
+function formatClockValue(v){
+  const m=String(v||'').match(/^([0-2]?\d):([0-5]\d)(?::[0-5]\d)?$/);if(!m)return v||'';
+  const h=Number(m[1]),min=m[2];
+  if(hourFormat()==='24')return String(h).padStart(2,'0')+':'+min;
+  const ap=h>=12?'PM':'AM',h12=h%12||12;return h12+':'+min+' '+ap;
+}
+function parseClockValue(v){
+  const s=String(v||'').trim().toUpperCase();
+  let m=s.match(/^([0-2]?\d):([0-5]\d)$/);
+  if(m&&Number(m[1])<=23)return String(Number(m[1])).padStart(2,'0')+':'+m[2];
+  m=s.match(/^(1[0-2]|0?[1-9]):([0-5]\d)\s*(AM|PM)$/);
+  if(!m)return null;
+  let h=Number(m[1]);if(m[3]==='AM'&&h===12)h=0;if(m[3]==='PM'&&h!==12)h+=12;
+  return String(h).padStart(2,'0')+':'+m[2];
+}
+function clockFromDate(s){const d=new Date(s);const h=d.getHours(),m=String(d.getMinutes()).padStart(2,'0');return formatClockValue(String(h).padStart(2,'0')+':'+m)}
+function setHourFormat(v){localStorage.setItem(HOUR_FORMAT_KEY,v==='12'?'12':'24');const a=$('hourFormatSetting');if(a)a.value=hourFormat();render()}
+window.pcSetHourFormat=setHourFormat;window.pcHourFormat=hourFormat;window.pcFormatTime=fmtT;window.pcClockFromDate=clockFromDate;window.pcParseClockValue=parseClockValue;
 function tzName(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'Horário local'}catch(e){return'Horário local'}}
 
 function localDateKey(s){return new Date(s).toLocaleDateString('en-CA')}
@@ -230,7 +254,7 @@ function hoursSummary(days){
 function toast(m){$('toast').textContent=m;$('toast').style.display='block';setTimeout(()=>{$('toast').style.display='none'},1800)}
 function show(id,b){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');if(id==='empPunch')capturePunchLocation();render()}
 function role(emp){$('rEmp').classList.toggle('active',emp);$('rEr').classList.toggle('active',!emp);$('empNav').classList.toggle('hidden',!emp);$('erNav').classList.toggle('hidden',emp);show(emp?'empHome':'erToday',document.querySelector(emp?'#empNav button':'#erNav button'))}
-$('rEmp').onclick=()=>role(true);$('rEr').onclick=()=>role(false);document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.go,b));$('today').textContent=new Date().toLocaleDateString('pt-BR',{dateStyle:'full'});if($('aDate'))$('aDate').value=new Date().toISOString().slice(0,10);if($('calMonth'))$('calMonth').value=calendarMonth;
+$('rEmp').onclick=()=>role(true);$('rEr').onclick=()=>role(false);document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.go,b));$('today').textContent=new Date().toLocaleDateString('pt-BR',{dateStyle:'full'});if($('aDate'))$('aDate').value=new Date().toISOString().slice(0,10);if($('aTime'))$('aTime').value=formatClockValue('08:00');if($('calMonth'))$('calMonth').value=calendarMonth;if($('hourFormatSetting'))$('hourFormatSetting').value=hourFormat();
 
 function dist(a,b,c,d){const R=6371000,p=Math.PI/180,x=Math.sin((c-a)*p/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin((d-b)*p/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
 function classify(l,w){if(!l)return{text:'Localização indisponível',d:null};if(l.acc>200)return{text:'Baixa precisão',d:w.lat==null?null:Math.round(dist(l.lat,l.lon,w.lat,w.lon))};if(w.lat==null)return{text:'Local ainda não configurado',d:null};const d=Math.round(dist(l.lat,l.lon,w.lat,w.lon));return{text:d<=w.radius?'Dentro do local de trabalho':'Fora do local de trabalho',d}}
@@ -410,7 +434,7 @@ function openDetail(id){const p=st.punches.find(x=>x.id===id),c=p?approvedCorrec
 function showPhoto(id){const p=st.punches.find(x=>x.id===id);if(p?.photo){$('modalPhoto').src=p.photo;$('photoModal').classList.remove('hidden')}}$('closePhoto').onclick=()=>{$('photoModal').classList.add('hidden');$('modalPhoto').src=''};$('photoModal').onclick=e=>{if(e.target===$('photoModal')){$('photoModal').classList.add('hidden');$('modalPhoto').src=''}};
 function decide(id,status){if(window.pcDecideAdjustment)return window.pcDecideAdjustment(id,status);const a=st.adjustments.find(x=>x.id===id);if(a){a.status=status;a.decidedAt=new Date().toISOString();save();render();toast(status)}}
 
-function schedHtml(s){return ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'].map((n,i)=>{const d=s[i]||baseSched[i];return `<div class="day" data-day="${i}"><div class="dayhead"><b>${n}</b><label style="margin:0;font-weight:500"><input class="works" type="checkbox" ${d.works?'checked':''}> Trabalha</label></div><div class="times"><input class="start" type="time" value="${d.start}"><input class="bs" type="time" value="${d.bs}"><input class="be" type="time" value="${d.be}"><input class="end" type="time" value="${d.end}"></div></div>`}).join('')}
+function schedHtml(s){return ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'].map((n,i)=>{const d=s[i]||baseSched[i];return `<div class="day" data-day="${i}"><div class="dayhead"><b>${n}</b><label style="margin:0;font-weight:500"><input class="works" type="checkbox" ${d.works?'checked':''}> Trabalha</label></div><div class="times"><input class="start" type="text" inputmode="text" placeholder="${hourFormat()==='24'?'08:00':'8:00 AM'}" value="${formatClockValue(d.start)}"><input class="bs" type="text" inputmode="text" placeholder="${hourFormat()==='24'?'12:00':'12:00 PM'}" value="${formatClockValue(d.bs)}"><input class="be" type="text" inputmode="text" placeholder="${hourFormat()==='24'?'13:00':'1:00 PM'}" value="${formatClockValue(d.be)}"><input class="end" type="text" inputmode="text" placeholder="${hourFormat()==='24'?'17:00':'5:00 PM'}" value="${formatClockValue(d.end)}"></div></div>`}).join('')}
 
 function setEmployeeEdit(on){['eName','eCpf','ePis','eContact','eAdmission','eRole'].forEach(id=>$(id).disabled=!on);$('employeeEditActions').classList.toggle('hidden',!on);$('editEmployeeData').classList.toggle('hidden',on)}
 function setScheduleEdit(on){document.querySelectorAll('#scheduleEditor input').forEach(x=>x.disabled=!on);$('scheduleEditActions').classList.toggle('hidden',!on);$('editSchedule').classList.toggle('hidden',on)}
@@ -447,7 +471,7 @@ $('editSchedule').onclick=()=>{const e=emp(editing);scheduleSnapshot=JSON.string
 $('cancelScheduleEdit').onclick=()=>{const e=emp(editing);if(scheduleSnapshot)e.schedule=JSON.parse(scheduleSnapshot);$('scheduleEditor').innerHTML=schedHtml(e.schedule);setScheduleEdit(false);scheduleSnapshot=null};
 $('saveSchedule').onclick=()=>{
 const e=emp(editing);if(!e){toast('Salve o empregado primeiro');return}
-const newSched={};document.querySelectorAll('#scheduleEditor .day').forEach(r=>newSched[r.dataset.day]={works:r.querySelector('.works').checked,start:r.querySelector('.start').value,bs:r.querySelector('.bs').value,be:r.querySelector('.be').value,end:r.querySelector('.end').value});
+const newSched={};let invalidTime=false;document.querySelectorAll('#scheduleEditor .day').forEach(r=>{const works=r.querySelector('.works').checked;const vals=['start','bs','be','end'].map(c=>r.querySelector('.'+c).value.trim());const parsed=vals.map(v=>v?parseClockValue(v):'');if(works&&parsed.some((v,i)=>vals[i]&&!v))invalidTime=true;newSched[r.dataset.day]={works,start:parsed[0]||'',bs:parsed[1]||'',be:parsed[2]||'',end:parsed[3]||''}});if(invalidTime){toast(hourFormat()==='24'?'Use horários como 08:00 ou 17:30.':'Use horários como 8:00 AM ou 5:30 PM.');return}
 const changedDays=[];const names=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];for(let i=0;i<7;i++){if(JSON.stringify(e.schedule[i])!==JSON.stringify(newSched[i]))changedDays.push(names[i])}
 if(!changedDays.length){toast('Nenhuma alteração identificada.');setScheduleEdit(false);return}
 if(!confirm(`Tem certeza que deseja ajustar a jornada de ${changedDays.join(', ')}?`))return;
@@ -477,6 +501,7 @@ e.workplace=after;save();workSnapshot=null;setWorkEdit(false);toast('Local salvo
 $('closeEditor').onclick=()=>$('editor').classList.add('hidden');
 
 document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-more]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['Reports','Adjustments','Settings'].forEach(x=>$('more'+x).classList.add('hidden'));$('more'+b.dataset.more[0].toUpperCase()+b.dataset.more.slice(1)).classList.remove('hidden')});
+if($('hourFormatSetting'))$('hourFormatSetting').onchange=e=>setHourFormat(e.target.value);
 if($('calEmployee'))$('calEmployee').onchange=e=>{calendarEmployeeId=e.target.value;render()};
 if($('calMonth'))$('calMonth').onchange=e=>{calendarMonth=e.target.value;render()};
 $('applyPeriod').onclick=()=>{reportRange.from=$('reportFrom').value||null;reportRange.to=$('reportTo').value||null;render();toast('Período aplicado')};
