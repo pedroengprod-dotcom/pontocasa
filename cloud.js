@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.11';
+const VERSION='0.11.1';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -364,10 +364,12 @@ async function syncEmployee(e){
     e.cloudId=cloudId;
   }
 
+  const todaySchedule=new Date().toLocaleDateString('en-CA');
   let {data:schedules,error:sErr}=await sb
-    .from('schedules').select('id')
+    .from('schedules').select('id,valid_from')
     .eq('employee_id',cloudId)
-    .order('created_at',{ascending:false})
+    .lte('valid_from',todaySchedule)
+    .order('valid_from',{ascending:false})
     .limit(1);
 
   if(sErr) throw sErr;
@@ -378,7 +380,7 @@ async function syncEmployee(e){
       .insert({
         household_id:householdId,
         employee_id:cloudId,
-        valid_from:new Date().toISOString().slice(0,10)
+        valid_from:(e.admission&&e.admission<=todaySchedule)?e.admission:todaySchedule
       })
       .select('id').single();
 
@@ -632,7 +634,7 @@ async function queueOfflinePunch(){
     latitude:loc?.lat??null,longitude:loc?.lon??null,accuracy_m:loc?.acc??null,
     distance_to_workplace_m:c.d,location_status:c.text,
     estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
-    photo_path:path,installation_id:inst(),app_version:'0.11',
+    photo_path:path,installation_id:inst(),app_version:'0.11.1',
     platform:navigator.userAgent.slice(0,500),was_offline:true,
     offline_captured_at:now.toISOString()
   };
@@ -805,7 +807,7 @@ async function saveCloudPunch(){
       estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
       photo_path:path,
       installation_id:inst(),
-      app_version:'0.11',
+      app_version:'0.11.1',
       platform:navigator.userAgent.slice(0,500),
       was_offline:false
     };
