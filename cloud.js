@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.9.1';
+const VERSION='0.10.1';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -416,10 +416,10 @@ async function cloudEmployeeToLocal(ce, index=0){
     for(const d of days){
       schedule[d.weekday]={
         works:d.works,
-        start:d.start_time||'',
-        bs:d.break_start||'',
-        be:d.break_end||'',
-        end:d.end_time||''
+        start:d.start_time?String(d.start_time).slice(0,5):'',
+        bs:d.break_start?String(d.break_start).slice(0,5):'',
+        be:d.break_end?String(d.break_end).slice(0,5):'',
+        end:d.end_time?String(d.end_time).slice(0,5):''
       };
     }
   }
@@ -560,7 +560,7 @@ async function queueOfflinePunch(){
     latitude:loc?.lat??null,longitude:loc?.lon??null,accuracy_m:loc?.acc??null,
     distance_to_workplace_m:c.d,location_status:c.text,
     estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
-    photo_path:path,installation_id:inst(),app_version:'0.9',
+    photo_path:path,installation_id:inst(),app_version:'0.10.1',
     platform:navigator.userAgent.slice(0,500),was_offline:true,
     offline_captured_at:now.toISOString()
   };
@@ -730,7 +730,7 @@ async function saveCloudPunch(){
       estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
       photo_path:path,
       installation_id:inst(),
-      app_version:'0.9',
+      app_version:'0.10.1',
       platform:navigator.userAgent.slice(0,500),
       was_offline:false
     };
