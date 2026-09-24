@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.10.2';
+const VERSION='0.11';
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -313,6 +313,32 @@ function schedRows(e,scheduleId){
     };
   });
 }
+function rowsFromScheduleObject(schedule,scheduleId){
+  return Object.keys(schedule||{}).map(k=>{const d=schedule[k]||{};return{schedule_id:scheduleId,weekday:Number(k),works:!!d.works,start_time:d.start||null,break_start:d.bs||null,break_end:d.be||null,end_time:d.end||null}});
+}
+function dayBefore(dateStr){const d=new Date(dateStr+'T12:00:00');d.setDate(d.getDate()-1);return d.toLocaleDateString('en-CA')}
+window.pcSaveScheduleVersion=async function(e,newSchedule,effectiveFrom){
+  if(!(currentRole==='owner'||currentRole==='admin')||!e?.cloudId)throw new Error('Perfil sem permissão para alterar jornada.');
+  const {data:existing,error:exErr}=await sb.from('schedules').select('id').eq('employee_id',e.cloudId).eq('valid_from',effectiveFrom).limit(1);
+  if(exErr)throw exErr;
+  let scheduleId=existing?.[0]?.id;
+  if(!scheduleId){
+    const {data:next,error:nErr}=await sb.from('schedules').select('id,valid_from').eq('employee_id',e.cloudId).gt('valid_from',effectiveFrom).order('valid_from',{ascending:true}).limit(1);
+    if(nErr)throw nErr;
+    const {data:prev,error:pErr}=await sb.from('schedules').select('id,valid_from').eq('employee_id',e.cloudId).lt('valid_from',effectiveFrom).order('valid_from',{ascending:false}).limit(1);
+    if(pErr)throw pErr;
+    const {data:created,error:cErr}=await sb.from('schedules').insert({household_id:householdId,employee_id:e.cloudId,valid_from:effectiveFrom,valid_to:next?.[0]?.valid_from?dayBefore(next[0].valid_from):null}).select('id').single();
+    if(cErr)throw cErr;
+    scheduleId=created.id;
+    if(prev?.[0]){
+      const {error:uErr}=await sb.from('schedules').update({valid_to:dayBefore(effectiveFrom)}).eq('id',prev[0].id);
+      if(uErr)throw uErr;
+    }
+  }
+  const {error:dErr}=await sb.from('schedule_days').upsert(rowsFromScheduleObject(newSchedule,scheduleId),{onConflict:'schedule_id,weekday'});
+  if(dErr)throw dErr;
+  await loadEmployerCloudData();
+};
 
 async function syncEmployee(e){
   const payload={
@@ -393,6 +419,16 @@ async function syncEmployee(e){
   }
 }
 
+window.pcSaveEmployeeProfile=async function(e){
+  if(!(currentRole==='owner'||currentRole==='admin')||!e?.cloudId)throw new Error('Perfil sem permissão para salvar empregado.');
+  const {error}=await sb.from('employees').update({
+    full_name:e.name,cpf:e.cpf,pis:e.pis||null,contact:e.contact||null,
+    admission_date:e.admission||null,job_title:e.role||null,active:e.active!==false
+  }).eq('id',e.cloudId);
+  if(error)throw error;
+  await loadEmployerCloudData();
+};
+
 document.getElementById('cloudUpload').onclick=async()=>{
   try{
     msg('Enviando dados...');
@@ -409,22 +445,18 @@ document.getElementById('cloudUpload').onclick=async()=>{
 
 async function cloudEmployeeToLocal(ce, index=0){
   const {data:ss,error:se}=await sb.from('schedules')
-    .select('id')
+    .select('id,valid_from,valid_to,created_at')
     .eq('employee_id',ce.id)
-    .order('created_at',{ascending:false})
-    .limit(1);
+    .order('valid_from',{ascending:true});
   if(se) throw se;
 
-  let schedule=JSON.parse(JSON.stringify(baseSched));
-
-  if(ss && ss[0]){
-    const {data:days,error:de}=await sb.from('schedule_days')
-      .select('*')
-      .eq('schedule_id',ss[0].id);
+  const scheduleHistory=[];
+  for(const sv of (ss||[])){
+    const {data:days,error:de}=await sb.from('schedule_days').select('*').eq('schedule_id',sv.id);
     if(de) throw de;
-    schedule={};
-    for(const d of days){
-      schedule[d.weekday]={
+    const sch={};
+    for(const d of (days||[])){
+      sch[d.weekday]={
         works:d.works,
         start:d.start_time?String(d.start_time).slice(0,5):'',
         bs:d.break_start?String(d.break_start).slice(0,5):'',
@@ -432,7 +464,12 @@ async function cloudEmployeeToLocal(ce, index=0){
         end:d.end_time?String(d.end_time).slice(0,5):''
       };
     }
+    scheduleHistory.push({id:sv.id,validFrom:sv.valid_from,validTo:sv.valid_to||null,schedule:sch});
   }
+  const today=new Date().toLocaleDateString('en-CA');
+  const currentVersions=scheduleHistory.filter(v=>v.validFrom<=today&&(!v.validTo||v.validTo>=today));
+  const current=currentVersions.length?currentVersions[currentVersions.length-1]:scheduleHistory[scheduleHistory.length-1];
+  const schedule=current?.schedule||JSON.parse(JSON.stringify(baseSched));
 
   const {data:wps,error:we}=await sb.from('workplaces')
     .select('*')
@@ -454,6 +491,7 @@ async function cloudEmployeeToLocal(ce, index=0){
     role:ce.job_title||'',
     active:ce.active,
     schedule,
+    scheduleHistory,
     workplace:{
       name:w?.name||'Casa principal',
       address:w?.address_text||'',
@@ -495,6 +533,29 @@ document.getElementById('cloudDownload').onclick=async()=>{
   }
 };
 
+function calendarEventToLocal(x,localEmployeeId){return{id:x.id,employeeId:localEmployeeId,date:x.event_date,type:x.event_type,note:x.note||'',createdAt:x.created_at}}
+async function loadCalendarEventsForEmployee(){
+  if(!currentEmployeeCloudId)return;
+  const {data,error}=await sb.from('calendar_events').select('*').eq('employee_id',currentEmployeeCloudId).order('event_date');
+  if(error)throw error;
+  st.calendarEvents=(data||[]).map(x=>calendarEventToLocal(x,'e1'));
+  save();render();
+}
+window.pcCreateCalendarEvent=async function(e,date,type,note){
+  if(!(currentRole==='owner'||currentRole==='admin')||!e?.cloudId)throw new Error('Ação não autorizada.');
+  const {error}=await sb.from('calendar_events').insert({household_id:householdId,employee_id:e.cloudId,event_date:date,event_type:type,note:note||null});
+  if(error)throw error;
+  await loadEmployerCloudData();
+};
+window.pcDeleteCalendarEvent=async function(id){
+  if(!(currentRole==='owner'||currentRole==='admin'))throw new Error('Ação não autorizada.');
+  if(!confirm('Excluir esta ocorrência do calendário?'))return;
+  const {error}=await sb.from('calendar_events').delete().eq('id',id);
+  if(error){alert('Não foi possível excluir: '+error.message);return}
+  await loadEmployerCloudData();
+  toast('Ocorrência excluída');
+};
+
 async function loadEmployeeForCurrentUser(){
   const {data:rows,error}=await sb.from('employees')
     .select('*')
@@ -514,6 +575,7 @@ async function loadEmployeeForCurrentUser(){
   if(navigator.onLine) await syncOfflineQueue(false);
   await loadPunchesForCurrentEmployee();
   await loadCorrectionsForCurrentEmployee();
+  await loadCalendarEventsForEmployee();
 }
 
 
@@ -570,7 +632,7 @@ async function queueOfflinePunch(){
     latitude:loc?.lat??null,longitude:loc?.lon??null,accuracy_m:loc?.acc??null,
     distance_to_workplace_m:c.d,location_status:c.text,
     estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
-    photo_path:path,installation_id:inst(),app_version:'0.10.1',
+    photo_path:path,installation_id:inst(),app_version:'0.11',
     platform:navigator.userAgent.slice(0,500),was_offline:true,
     offline_captured_at:now.toISOString()
   };
@@ -686,6 +748,9 @@ async function loadEmployerCloudData(){
 
   const byCloud=new Map(st.employees.map(e=>[e.cloudId,e.id]));
   st.punches=(punchRows||[]).map(p=>cloudPunchToLocal(p,byCloud.get(p.employee_id)||p.employee_id));
+  const {data:eventRows,error:eventErr}=await sb.from('calendar_events').select('*').eq('household_id',householdId).order('event_date');
+  if(eventErr)throw eventErr;
+  st.calendarEvents=(eventRows||[]).map(x=>calendarEventToLocal(x,byCloud.get(x.employee_id)||x.employee_id));
   save();
   render();
   await loadEmployerCorrections();
@@ -740,7 +805,7 @@ async function saveCloudPunch(){
       estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
       photo_path:path,
       installation_id:inst(),
-      app_version:'0.10.1',
+      app_version:'0.11',
       platform:navigator.userAgent.slice(0,500),
       was_offline:false
     };
