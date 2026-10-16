@@ -1,7 +1,14 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.11.4';
+const VERSION='0.11.5';
+function simulationBlocked(message='Ação indisponível no modo de simulação.'){
+  if(window.pcSimulationMode?.()){
+    try{toast(message)}catch(e){}
+    return true;
+  }
+  return false;
+}
 
 if(!window.supabase){
   console.error('Supabase não carregou.');
@@ -318,6 +325,7 @@ function rowsFromScheduleObject(schedule,scheduleId){
 }
 function dayBefore(dateStr){const d=new Date(dateStr+'T12:00:00');d.setDate(d.getDate()-1);return d.toLocaleDateString('en-CA')}
 window.pcSaveScheduleVersion=async function(e,newSchedule,effectiveFrom){
+  if(simulationBlocked())throw new Error('Modo de simulação ativo.');
   if(!(currentRole==='owner'||currentRole==='admin')||!e?.cloudId)throw new Error('Perfil sem permissão para alterar jornada.');
   const {data:existing,error:exErr}=await sb.from('schedules').select('id').eq('employee_id',e.cloudId).eq('valid_from',effectiveFrom).limit(1);
   if(exErr)throw exErr;
@@ -422,6 +430,7 @@ async function syncEmployee(e){
 }
 
 window.pcSaveEmployeeProfile=async function(e){
+  if(simulationBlocked())throw new Error('Modo de simulação ativo.');
   if(!(currentRole==='owner'||currentRole==='admin')||!e?.cloudId)throw new Error('Perfil sem permissão para salvar empregado.');
   const {error}=await sb.from('employees').update({
     full_name:e.name,cpf:e.cpf,pis:e.pis||null,contact:e.contact||null,
@@ -432,6 +441,7 @@ window.pcSaveEmployeeProfile=async function(e){
 };
 
 document.getElementById('cloudUpload').onclick=async()=>{
+  if(simulationBlocked())return;
   try{
     msg('Enviando dados...');
     await ensureHousehold();
@@ -505,6 +515,7 @@ async function cloudEmployeeToLocal(ce, index=0){
 }
 
 document.getElementById('cloudDownload').onclick=async()=>{
+  if(simulationBlocked())return;
   try{
     msg('Baixando dados...');
     await ensureHousehold();
@@ -544,6 +555,7 @@ async function loadCalendarEventsForEmployee(){
   save();render();
 }
 window.pcCreateCalendarEvent=async function(e,date,endDate,type,note){
+  if(simulationBlocked())throw new Error('Modo de simulação ativo.');
   if(!(currentRole==='owner'||currentRole==='admin')||!e?.cloudId)throw new Error('Ação não autorizada.');
   const rows=[];
   for(let d=new Date(date+'T12:00:00'),end=new Date((endDate||date)+'T12:00:00');d<=end;d.setDate(d.getDate()+1)){
@@ -554,6 +566,7 @@ window.pcCreateCalendarEvent=async function(e,date,endDate,type,note){
   await loadEmployerCloudData();
 };
 window.pcDeleteCalendarEvent=async function(id){
+  if(simulationBlocked())return;
   if(!(currentRole==='owner'||currentRole==='admin'))throw new Error('Ação não autorizada.');
   if(!confirm('Excluir esta ocorrência do calendário?'))return;
   const {error}=await sb.from('calendar_events').delete().eq('id',id);
@@ -562,7 +575,7 @@ window.pcDeleteCalendarEvent=async function(id){
   toast('Ocorrência excluída');
 };
 
-async function loadEmployeeForCurrentUser(){
+async function loadEmployeeForCurrentUser(){if(window.pcSimulationMode?.())return;
   const {data:rows,error}=await sb.from('employees')
     .select('*')
     .eq('auth_user_id',currentSession.user.id)
@@ -638,7 +651,7 @@ async function queueOfflinePunch(){
     latitude:loc?.lat??null,longitude:loc?.lon??null,accuracy_m:loc?.acc??null,
     distance_to_workplace_m:c.d,location_status:c.text,
     estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
-    photo_path:path,installation_id:inst(),app_version:'0.11.4',
+    photo_path:path,installation_id:inst(),app_version:'0.11.5',
     platform:navigator.userAgent.slice(0,500),was_offline:true,
     offline_captured_at:now.toISOString()
   };
@@ -732,6 +745,7 @@ async function loadPunchesForCurrentEmployee(){
 }
 
 async function loadEmployerCloudData(){
+  if(window.pcSimulationMode?.())return;
   await ensureHousehold();
   const {data:employees,error}=await sb.from('employees')
     .select('*')
@@ -763,6 +777,7 @@ async function loadEmployerCloudData(){
 }
 
 async function saveCloudPunch(){
+  if(simulationBlocked('No modo de simulação nenhuma batida é enviada ao banco oficial.'))return;
   if(!currentSession || currentRole!=='employee' || !currentEmployeeCloudId){
     toast('Entre com a conta do empregado.');
     return;
@@ -811,7 +826,7 @@ async function saveCloudPunch(){
       estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
       photo_path:path,
       installation_id:inst(),
-      app_version:'0.11.4',
+      app_version:'0.11.5',
       platform:navigator.userAgent.slice(0,500),
       was_offline:false
     };
@@ -910,6 +925,7 @@ window.pcOpenCorrection=function(punchId){
   show('empAdj',document.querySelector('#empNav [data-go="empAdj"]'));
 };
 window.pcSendAdjustment=async function(){
+  if(simulationBlocked('No modo de simulação nenhuma correção é enviada ao banco oficial.'))return;
   if(currentRole!=='employee'||!currentEmployeeCloudId){toast('Entre como empregado.');return}
   if(!navigator.onLine){toast('Solicitações de ajuste precisam de internet nesta versão.');return}
   const date=document.getElementById('aDate')?.value||new Date().toISOString().slice(0,10);
@@ -936,6 +952,7 @@ window.pcSendAdjustment=async function(){
   }catch(e){console.error(e);alert('Não foi possível enviar a solicitação: '+e.message)}
 };
 window.pcDecideAdjustment=async function(id,status){
+  if(simulationBlocked('No modo de simulação nenhuma decisão é enviada ao banco oficial.'))return;
   if(!(currentRole==='owner'||currentRole==='admin')){toast('Ação não autorizada.');return}
   if(!navigator.onLine){toast('Conecte-se à internet para decidir a solicitação.');return}
   try{
