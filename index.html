@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.11.4</title>
+<title>PontoCasa v0.11.5</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -41,6 +41,7 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <div class="app">
 <header><div class="top"><div class="brand">⌂ PontoCasa</div><div class="roles"><button id="rEmp" class="active">Empregado</button><button id="rEr">Empregador</button></div></div></header>
 <main>
+<div id="simulationBanner" class="note hidden" style="margin-bottom:12px;border-color:#f59e0b;background:#fffbeb;color:#92400e"><b>MODO DE SIMULAÇÃO ATIVO</b><br>Todos os registros exibidos neste cenário são fictícios e ficam somente neste aparelho. Nenhuma batida, correção ou ocorrência simulada é enviada ao banco oficial.</div>
 
 <section id="empHome" class="screen active">
 <h1 class="title">Olá, Maria</h1><div id="today" class="sub"></div>
@@ -155,6 +156,15 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 <div id="moreAdjustments" class="hidden"></div>
 <div id="moreSettings" class="hidden">
 <div class="card"><b>Preferências</b><label>Formato de horário</label><select id="hourFormatSetting"><option value="24">24 horas (17:30)</option><option value="12">12 horas (5:30 PM)</option></select><div class="small muted" style="margin-top:6px">O padrão do PontoCasa no Brasil é 24 horas. Esta preferência fica salva neste aparelho.</div></div>
+<div class="card">
+  <b>Ambiente de simulação</b>
+  <div class="small muted" style="margin-top:5px">Carrega um histórico fictício e repetível para testar calendário, pendências, relatórios e o futuro banco de horas sem contaminar os registros reais.</div>
+  <div id="simulationStatus" class="note" style="margin-top:10px"></div>
+  <button id="toggleSimulation" class="secondary" style="margin-top:10px"></button>
+  <button id="runSelfTests" class="secondary" style="margin-top:8px">Executar testes automáticos</button>
+  <div id="selfTestStatus" class="small" style="margin-top:9px"></div>
+  <div class="note" style="margin-top:10px"><b>Referências do cenário</b><br>Agosto/2026: 168h previstas · 210h trabalhadas · diferença +42h.<br>Setembro/2026: 152h previstas · 145h15 apuradas · 1h45 a mais · 0h30 a menos · diferença apurada +1h15 · 1 dia incompleto.</div>
+</div>
 <div class="card"><b>Protótipo local</b><div class="small muted">Dados ficam só neste navegador/aparelho. Não use dados reais.</div><button id="reset" class="secondary" style="margin-top:10px;color:var(--bad)">Apagar dados de teste</button></div>
 </div>
 </section>
@@ -169,11 +179,14 @@ nav button{border:0;background:transparent;padding:12px 2px;color:var(--muted);f
 
 <script>
 const KEY='pontocasa-v05';
+const SIM_MODE_KEY='pc-simulation-mode';
+const SIM_BACKUP_KEY='pc-simulation-backup';
+const SIM_SCENARIO='bank-hours-v1';
 const baseSched={0:{works:false,start:'',bs:'',be:'',end:''},1:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},2:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},3:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},4:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},5:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},6:{works:false,start:'',bs:'',be:'',end:''}};
 let st=JSON.parse(localStorage.getItem(KEY)||'null')||{employees:[{id:'e1',name:'Maria',cpf:'000.000.000-00',pis:'',contact:'',admission:'',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),scheduleHistory:[],workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],punches:[],adjustments:[],calendarEvents:[]};
 st.calendarEvents=st.calendarEvents||[];
-let photo=null,loc=null,editing='e1',employeeSnapshot=null,scheduleSnapshot=null,workSnapshot=null,reportRange={from:null,to:null};
-let calendarMonth=new Date().toLocaleDateString('en-CA').slice(0,7),calendarEmployeeId=null;
+let photo=null,loc=null,editing='e1',employeeSnapshot=null,scheduleSnapshot=null,workSnapshot=null,reportRange=localStorage.getItem(SIM_MODE_KEY)==='1'?{from:'2026-08-01',to:'2026-09-30'}:{from:null,to:null};
+let calendarMonth=localStorage.getItem(SIM_MODE_KEY)==='1'?'2026-08':new Date().toLocaleDateString('en-CA').slice(0,7),calendarEmployeeId=null;
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(st)),uid=()=>crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random(),fmtD=s=>new Date(s).toLocaleDateString('pt-BR');
 const HOUR_FORMAT_KEY='pc-hour-format';
 function hourFormat(){return localStorage.getItem(HOUR_FORMAT_KEY)==='12'?'12':'24'}
@@ -199,6 +212,101 @@ function setHourFormat(v){localStorage.setItem(HOUR_FORMAT_KEY,v==='12'?'12':'24
 window.pcSetHourFormat=setHourFormat;window.pcHourFormat=hourFormat;window.pcFormatTime=fmtT;window.pcClockFromDate=clockFromDate;window.pcParseClockValue=parseClockValue;
 function tzName(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'Horário local'}catch(e){return'Horário local'}}
 
+function isSimulationMode(){return localStorage.getItem(SIM_MODE_KEY)==='1'}
+window.pcSimulationMode=isSimulationMode;
+function simPunch(date,time,type,suffix){
+  return {id:'sim-'+date.replaceAll('-','')+'-'+suffix,employeeId:'e1',type,deviceTime:date+'T'+time+':00',serverTime:date+'T'+time+':05',syncTime:date+'T'+time+':05',lat:null,lon:null,accuracy:null,distance:null,status:'Dentro do local de trabalho',addressEstimate:'Registro fictício de simulação',photo:null,cloudPhotoPath:null,installationId:'SIMULACAO',offline:false,integrityId:'SIM-'+date+'-'+suffix,simulation:true};
+}
+function addSimDay(punches,date,opts={}){
+  const values={start:opts.start||'08:00',bs:opts.bs||'12:00',be:opts.be||'13:00',end:opts.end||'17:00'};
+  const omit=new Set(opts.omit||[]);
+  [['Entrada','start','in'],['Início do intervalo','bs','bs'],['Fim do intervalo','be','be'],['Saída','end','out']].forEach(([type,key,suffix])=>{if(!omit.has(type))punches.push(simPunch(date,values[key],type,suffix))});
+}
+function weekdaysOfMonth(year,month){
+  const out=[],last=new Date(year,month,0).getDate();
+  for(let d=1;d<=last;d++){const key=year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0'),wd=new Date(key+'T12:00:00').getDay();if(wd>=1&&wd<=5)out.push(key)}
+  return out;
+}
+function buildSimulationState(){
+  const schedule=JSON.parse(JSON.stringify(baseSched));
+  const employee={id:'e1',name:'Maria · SIMULAÇÃO',cpf:'000.000.000-00',pis:'',contact:'',admission:'2026-08-01',role:'Empregada doméstica',active:true,schedule,scheduleHistory:[{id:'sim-schedule',validFrom:'2026-08-01',validTo:null,schedule:JSON.parse(JSON.stringify(schedule))}],workplace:{name:'Casa simulada',address:'Cenário fictício',lat:null,lon:null,radius:100},simulation:true};
+  const punches=[],adjustments=[],calendarEvents=[
+    {id:'sim-event-feriado',employeeId:'e1',date:'2026-09-07',type:'Feriado/dispensa',note:'Cenário de teste',simulation:true},
+    {id:'sim-event-ferias',employeeId:'e1',date:'2026-09-11',type:'Ferias',note:'Cenário de teste',simulation:true},
+    {id:'sim-event-folga',employeeId:'e1',date:'2026-09-15',type:'Folga extraordinaria',note:'Cenário de teste',simulation:true}
+  ];
+  weekdaysOfMonth(2026,8).forEach(date=>addSimDay(punches,date,{end:'19:00'}));
+  const excluded=new Set(['2026-09-07','2026-09-11','2026-09-15']);
+  weekdaysOfMonth(2026,9).forEach(date=>{
+    if(excluded.has(date))return;
+    if(date==='2026-09-02')return addSimDay(punches,date,{end:'17:45'});
+    if(date==='2026-09-03')return addSimDay(punches,date,{end:'16:30'});
+    if(date==='2026-09-04')return addSimDay(punches,date,{end:'18:00'});
+    if(date==='2026-09-08')return addSimDay(punches,date,{omit:['Saída']});
+    if(date==='2026-09-09'){
+      addSimDay(punches,date,{start:'08:30'});
+      adjustments.push({id:'sim-corr-0909',employeeId:'e1',type:'Entrada',time:'08:00',requestedTime:'2026-09-09T08:00:00',reason:'Horário incorreto',note:'Correção fictícia aprovada',originalPunchId:'sim-20260909-in',status:'Aprovado',createdAt:'2026-09-09T18:00:00',decidedAt:'2026-09-09T18:05:00',simulation:true});
+      return;
+    }
+    if(date==='2026-09-10'){
+      addSimDay(punches,date,{omit:['Fim do intervalo']});
+      adjustments.push({id:'sim-missing-0910',employeeId:'e1',type:'Fim do intervalo',time:'13:00',requestedTime:'2026-09-10T13:00:00',reason:'Esqueci de registrar',note:'Inclusão fictícia aprovada',originalPunchId:null,status:'Aprovado',createdAt:'2026-09-10T18:00:00',decidedAt:'2026-09-10T18:05:00',simulation:true});
+      return;
+    }
+    addSimDay(punches,date);
+  });
+  return {employees:[employee],punches,adjustments,calendarEvents,simulationScenario:SIM_SCENARIO};
+}
+function enableSimulation(){
+  if(isSimulationMode())return;
+  localStorage.setItem(SIM_BACKUP_KEY,localStorage.getItem(KEY)||'');
+  localStorage.setItem(SIM_MODE_KEY,'1');
+  st=buildSimulationState();save();location.reload();
+}
+function disableSimulation(){
+  const backup=localStorage.getItem(SIM_BACKUP_KEY);
+  if(backup)localStorage.setItem(KEY,backup);else localStorage.removeItem(KEY);
+  localStorage.removeItem(SIM_BACKUP_KEY);localStorage.removeItem(SIM_MODE_KEY);location.reload();
+}
+function runCalculationSelfTests(){
+  const original=st;
+  const results=[];
+  const check=(name,actual,expected)=>results.push({name,actual,expected,ok:actual===expected});
+  try{
+    st=buildSimulationState();const e=st.employees[0];
+    const aug=hoursSummary(periodDays(e,'2026-08-01','2026-08-31'));
+    check('Agosto · previsto',Math.round(aug.planned),10080);
+    check('Agosto · trabalhado',Math.round(aug.worked),12600);
+    check('Agosto · diferença',Math.round(aug.balance),2520);
+    const sep=hoursSummary(periodDays(e,'2026-09-01','2026-09-30'));
+    check('Setembro · previsto',Math.round(sep.planned),9120);
+    check('Setembro · trabalhado',Math.round(sep.worked),8715);
+    check('Setembro · horas a mais',Math.round(sep.extra),105);
+    check('Setembro · horas a menos',Math.round(sep.pending),30);
+    check('Setembro · diferença apurada',Math.round(sep.balance),75);
+    const incomplete=dayHours(e,'2026-09-08');
+    check('Dia incompleto não vira saldo',incomplete.balance,null);
+    check('Dia incompleto detecta saída',incomplete.missing.some(x=>x.type==='Saída'),true);
+    const corrected=dayHours(e,'2026-09-09');
+    check('Correção aprovada entra no cálculo',Math.round(corrected.worked),480);
+    const inserted=dayHours(e,'2026-09-10');
+    check('Batida incluída aprovada entra no cálculo',Math.round(inserted.worked),480);
+    const vacation=dayHours(e,'2026-09-11');
+    check('Férias zeram jornada prevista',Math.round(vacation.planned),0);
+  }catch(err){results.push({name:'Execução dos testes',actual:err.message,expected:'sem erro',ok:false})}
+  finally{st=original}
+  return results;
+}
+function renderSimulationPanel(){
+  const on=isSimulationMode(),banner=$('simulationBanner'),status=$('simulationStatus'),btn=$('toggleSimulation'),testBox=$('selfTestStatus');
+  if(banner)banner.classList.toggle('hidden',!on);
+  if(status)status.innerHTML=on?'<b style="color:var(--warn)">Ativo</b> · cenário Agosto + Setembro/2026. Os dados reais estão preservados e serão restaurados ao sair.':'<b>Desativado</b> · o app está mostrando os dados reais do ambiente de teste.';
+  if(btn){btn.textContent=on?'Sair do modo de simulação':'Ativar cenário de simulação';btn.style.color=on?'var(--bad)':''}
+  if(testBox){const r=runCalculationSelfTests(),ok=r.filter(x=>x.ok).length;testBox.innerHTML='<b>Testes automáticos: '+ok+'/'+r.length+' aprovados.</b>'+(ok===r.length?'':'<br>'+r.filter(x=>!x.ok).map(x=>x.name+': esperado '+x.expected+', obtido '+x.actual).join('<br>'))}
+}
+
+
+if(isSimulationMode()&&st.simulationScenario!==SIM_SCENARIO){st=buildSimulationState();save()}
 function localDateKey(s){return new Date(s).toLocaleDateString('en-CA')}
 function hmToMin(v){if(!v)return null;const m=String(v).match(/^([0-2]\d):([0-5]\d)(?::[0-5]\d)?$/);if(!m)return null;return Number(m[1])*60+Number(m[2])}
 function durMin(a,b){const x=hmToMin(a),y=hmToMin(b);return x==null||y==null?0:Math.max(0,y-x)}
@@ -324,7 +432,7 @@ function hoursSummary(days){
 function toast(m){$('toast').textContent=m;$('toast').style.display='block';setTimeout(()=>{$('toast').style.display='none'},1800)}
 function show(id,b){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');if(id==='empPunch')capturePunchLocation();render()}
 function role(emp){$('rEmp').classList.toggle('active',emp);$('rEr').classList.toggle('active',!emp);$('empNav').classList.toggle('hidden',!emp);$('erNav').classList.toggle('hidden',emp);show(emp?'empHome':'erToday',document.querySelector(emp?'#empNav button':'#erNav button'))}
-$('rEmp').onclick=()=>role(true);$('rEr').onclick=()=>role(false);document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.go,b));$('today').textContent=new Date().toLocaleDateString('pt-BR',{dateStyle:'full'});if($('aDate'))$('aDate').value=new Date().toISOString().slice(0,10);if($('aTime'))$('aTime').value=formatClockValue('08:00');if($('calMonth'))$('calMonth').value=calendarMonth;if($('hourFormatSetting'))$('hourFormatSetting').value=hourFormat();
+$('rEmp').onclick=()=>role(true);$('rEr').onclick=()=>role(false);document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.go,b));$('today').textContent=new Date().toLocaleDateString('pt-BR',{dateStyle:'full'});if($('aDate'))$('aDate').value=new Date().toISOString().slice(0,10);if($('aTime'))$('aTime').value=formatClockValue('08:00');if($('calMonth'))$('calMonth').value=calendarMonth;if($('hourFormatSetting'))$('hourFormatSetting').value=hourFormat();if(isSimulationMode()){if($('reportFrom'))$('reportFrom').value='2026-08-01';if($('reportTo'))$('reportTo').value='2026-09-30';}
 
 function dist(a,b,c,d){const R=6371000,p=Math.PI/180,x=Math.sin((c-a)*p/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin((d-b)*p/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
 function classify(l,w){if(!l)return{text:'Localização indisponível',d:null};if(l.acc>200)return{text:'Baixa precisão',d:w.lat==null?null:Math.round(dist(l.lat,l.lon,w.lat,w.lon))};if(w.lat==null)return{text:'Local ainda não configurado',d:null};const d=Math.round(dist(l.lat,l.lon,w.lat,w.lon));return{text:d<=w.radius?'Dentro do local de trabalho':'Fora do local de trabalho',d}}
@@ -462,7 +570,7 @@ function reportEntries(){
     if(!inRange(p))return;
     const c=st.adjustments.find(a=>a.originalPunchId===p.id&&a.status==='Aprovado');
     entries.push({
-      kind:c?'Corrigida':'Original',
+      kind:(p.simulation?'SIMULAÇÃO · ':'')+(c?'Corrigida':'Original'),
       employeeId:p.employeeId,
       effectiveTime:c?.requestedTime||p.deviceTime,
       effectiveType:c?.type||p.type,
@@ -474,7 +582,7 @@ function reportEntries(){
     const pseudo={deviceTime:a.requestedTime};
     if(!inRange(pseudo))return;
     entries.push({
-      kind:'Incluída manualmente',
+      kind:(a.simulation?'SIMULAÇÃO · ':'')+'Incluída manualmente',
       employeeId:a.employeeId,
       effectiveTime:a.requestedTime,
       effectiveType:a.type,
@@ -600,6 +708,8 @@ $('closeEditor').onclick=()=>$('editor').classList.add('hidden');
 
 document.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-more]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['Reports','Pendings','Adjustments','Settings'].forEach(x=>$('more'+x).classList.add('hidden'));$('more'+b.dataset.more[0].toUpperCase()+b.dataset.more.slice(1)).classList.remove('hidden')});
 if($('hourFormatSetting'))$('hourFormatSetting').onchange=e=>setHourFormat(e.target.value);
+if($('toggleSimulation'))$('toggleSimulation').onclick=()=>isSimulationMode()?disableSimulation():enableSimulation();
+if($('runSelfTests'))$('runSelfTests').onclick=()=>{renderSimulationPanel();const r=runCalculationSelfTests();toast(r.every(x=>x.ok)?'Todos os testes passaram.':'Há teste com falha; confira Configurações.')};
 if($('calEmployee'))$('calEmployee').onchange=e=>{calendarEmployeeId=e.target.value;render()};
 if($('calEventDate')&&!$('calEventDate').value)$('calEventDate').value=localDateKey(new Date());
 if($('saveCalEvent'))$('saveCalEvent').onclick=async()=>{const e=emp(calendarEmployeeId||st.employees[0]?.id);if(!e)return;const date=$('calEventDate').value,endDate=$('calEventEndDate').value||date,type=$('calEventType').value,note=$('calEventNote').value.trim();if(!date){toast('Informe a data inicial.');return}if(endDate<date){toast('A data final não pode ser anterior à inicial.');return}try{if(window.pcCreateCalendarEvent&&e.cloudId)await window.pcCreateCalendarEvent(e,date,endDate,type,note);else{for(let d=new Date(date+'T12:00:00'),end=new Date(endDate+'T12:00:00');d<=end;d.setDate(d.getDate()+1))st.calendarEvents.push({id:uid(),employeeId:e.id,date:d.toLocaleDateString('en-CA'),type,note});save();render()}$('calEventNote').value='';$('calEventEndDate').value='';toast(date===endDate?'Ocorrência registrada':'Período registrado no calendário')}catch(err){console.error(err);alert('Não foi possível registrar a ocorrência: '+err.message)}};
@@ -682,9 +792,9 @@ try{
 }
 };
 $('pdfFuture').onclick=()=>toast('PDF com assinaturas entra na versão definitiva.');
-$('reset').onclick=()=>{if(confirm('Apagar dados de teste?')){localStorage.removeItem(KEY);location.reload()}};
+$('reset').onclick=()=>{if(isSimulationMode()){toast('Saia do modo de simulação antes de apagar dados locais.');return}if(confirm('Apagar dados de teste?')){localStorage.removeItem(KEY);location.reload()}};
 
-function render(){renderEmp();renderEr()}
+function render(){renderEmp();renderEr();renderSimulationPanel()}
 render();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
