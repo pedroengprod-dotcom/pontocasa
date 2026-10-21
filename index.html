@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.11.5</title>
+<title>PontoCasa v0.12</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -185,9 +185,12 @@ const SIM_SCENARIO='bank-hours-v1';
 const baseSched={0:{works:false,start:'',bs:'',be:'',end:''},1:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},2:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},3:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},4:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},5:{works:true,start:'08:00',bs:'12:00',be:'13:00',end:'17:00'},6:{works:false,start:'',bs:'',be:'',end:''}};
 let st=JSON.parse(localStorage.getItem(KEY)||'null')||{employees:[{id:'e1',name:'Maria',cpf:'000.000.000-00',pis:'',contact:'',admission:'',role:'Empregada doméstica',active:true,schedule:JSON.parse(JSON.stringify(baseSched)),scheduleHistory:[],workplace:{name:'Casa principal',address:'',lat:null,lon:null,radius:100}}],punches:[],adjustments:[],calendarEvents:[]};
 st.calendarEvents=st.calendarEvents||[];
+st.hourBankAgreements=st.hourBankAgreements||[];
+st.hourBankCompensations=st.hourBankCompensations||[];
 let photo=null,loc=null,editing='e1',employeeSnapshot=null,scheduleSnapshot=null,workSnapshot=null,reportRange=localStorage.getItem(SIM_MODE_KEY)==='1'?{from:'2026-08-01',to:'2026-09-30'}:{from:null,to:null};
 let calendarMonth=localStorage.getItem(SIM_MODE_KEY)==='1'?'2026-08':new Date().toLocaleDateString('en-CA').slice(0,7),calendarEmployeeId=null;
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(st)),uid=()=>crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random(),fmtD=s=>new Date(s).toLocaleDateString('pt-BR');
+window.pcGetState=()=>st;window.pcSetState=v=>{st=v};window.pcSaveState=()=>save();
 const HOUR_FORMAT_KEY='pc-hour-format';
 function hourFormat(){return localStorage.getItem(HOUR_FORMAT_KEY)==='12'?'12':'24'}
 function fmtT(s){if(!s)return'';const d=new Date(s);return d.toLocaleTimeString(hourFormat()==='12'?'en-US':'pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:hourFormat()==='12'})}
@@ -794,13 +797,14 @@ try{
 $('pdfFuture').onclick=()=>toast('PDF com assinaturas entra na versão definitiva.');
 $('reset').onclick=()=>{if(isSimulationMode()){toast('Saia do modo de simulação antes de apagar dados locais.');return}if(confirm('Apagar dados de teste?')){localStorage.removeItem(KEY);location.reload()}};
 
-function render(){renderEmp();renderEr();renderSimulationPanel()}
+function render(){renderEmp();renderEr();renderSimulationPanel();if(window.pcRenderBank)window.pcRenderBank()}
 render();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./cloud.js"></script>
+<script src="./bank.js"></script>
 
 </body>
 </html>
