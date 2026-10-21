@@ -1,7 +1,7 @@
 (function(){
 const SUPABASE_URL='https://jkjgkdltivasjbrssmsf.supabase.co';
 const SUPABASE_KEY='sb_publishable_M3kbYIqn9hfMDbH4UwIGwQ_ICyKKZu8';
-const VERSION='0.11.5';
+const VERSION='0.12';
 function simulationBlocked(message='Ação indisponível no modo de simulação.'){
   if(window.pcSimulationMode?.()){
     try{toast(message)}catch(e){}
@@ -651,7 +651,7 @@ async function queueOfflinePunch(){
     latitude:loc?.lat??null,longitude:loc?.lon??null,accuracy_m:loc?.acc??null,
     distance_to_workplace_m:c.d,location_status:c.text,
     estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
-    photo_path:path,installation_id:inst(),app_version:'0.11.5',
+    photo_path:path,installation_id:inst(),app_version:'0.12',
     platform:navigator.userAgent.slice(0,500),was_offline:true,
     offline_captured_at:now.toISOString()
   };
@@ -826,7 +826,7 @@ async function saveCloudPunch(){
       estimated_address:loc?.addressEstimate||'Endereço estimado indisponível',
       photo_path:path,
       installation_id:inst(),
-      app_version:'0.11.5',
+      app_version:'0.12',
       platform:navigator.userAgent.slice(0,500),
       was_offline:false
     };
