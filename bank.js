@@ -398,6 +398,4 @@ function runTestsHtml(){
 injectUI();ensureCollections();ensureSimulationBank();renderBank();
 setTimeout(loadCloudBank,500);setTimeout(loadCloudBank,1800);
 if(window.pontoCasaSupabase)window.pontoCasaSupabase.auth.onAuthStateChange(()=>setTimeout(loadCloudBank,300));
-document.addEventListener('click',()=>setTimeout(renderBank,0));
-document.addEventListener('change',()=>setTimeout(renderBank,0));
 })();
