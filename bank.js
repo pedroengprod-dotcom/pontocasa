@@ -70,13 +70,13 @@ function quantifiableDeficit(e,date){
 }
 function deficitDays(e,month){
   const b=monthBounds(month);
-  return periodDays(e,b.from,b.to).filter(d=>agreementForDate(e,d.dateKey)&&d.planned>0).map(d=>{
+  return periodDays(e,b.from,b.to).filter(d=>d.planned>0).map(d=>{
     const deficit=quantifiableDeficit(e,d.dateKey),t=treatmentForDate(e.id,d.dateKey);
     return{day:d,deficit,treatment:t};
   }).filter(x=>x.deficit===null||x.deficit>0||x.treatment);
 }
 function treatmentMinutes(e,month,type){
-  return activeTreatments(e.id).filter(x=>x.date.slice(0,7)===month&&x.type===type&&agreementForDate(e,x.date)).reduce((n,x)=>n+x.minutes,0);
+  return activeTreatments(e.id).filter(x=>x.date.slice(0,7)===month&&x.type===type&&(type!=='compensation'||agreementForDate(e,x.date))).reduce((n,x)=>n+x.minutes,0);
 }
 function monthRaw(e,month){
   const b=monthBounds(month),days=periodDays(e,b.from,b.to).filter(d=>agreementForDate(e,d.dateKey));
@@ -217,7 +217,7 @@ function deficitListHtml(e,month){
       const mismatch=calc!=null&&Math.round(calc)!==Math.round(t.minutes);
       return'<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px">'+header+'<span class="status ok">Classificado</span></div><div class="small" style="margin-top:8px"><b>'+treatmentLabel(t)+'</b> · '+fmtMin(t.minutes)+(t.note?' · '+t.note:'')+'</div>'+(mismatch?'<div class="note" style="margin-top:7px;color:var(--warn)">O cálculo atual mudou. Cancele e classifique novamente para atualizar.</div>':'')+'<button class="secondary" style="margin-top:8px;color:var(--bad)" data-cancel-treatment="'+t.id+'">Cancelar classificação</button></div>';
     }
-    return'<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px">'+header+'<span class="status warn">Pendente</span></div><div class="grid3" style="margin-top:10px"><button class="secondary" data-classify="compensation" data-date="'+date+'">Compensar</button><button class="secondary" data-classify="absence" data-date="'+date+'">Falta / atraso</button><button class="secondary" data-classify="justified" data-date="'+date+'">Justificada / abonada</button></div>'+(justifiedDate===date?justifiedForm(date):'')+'</div>';
+    const canComp=!!agreementForDate(e,date);return'<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px">'+header+'<span class="status warn">Pendente</span></div><div class="grid3" style="margin-top:10px"><button class="secondary" data-classify="compensation" data-date="'+date+'" '+(canComp?'':'disabled')+'>Compensar</button><button class="secondary" data-classify="absence" data-date="'+date+'">Falta / atraso</button><button class="secondary" data-classify="justified" data-date="'+date+'">Justificada / abonada</button></div>'+(!canComp?'<div class="small muted" style="margin-top:6px">Compensação indisponível: não há acordo de banco vigente nessa data.</div>':'')+(justifiedDate===date?justifiedForm(date):'')+'</div>';
   }).join('');
 }
 function ledgerHtml(e,to){
@@ -255,7 +255,7 @@ function renderBank(){
       '</div>'+
       ((sum.unclassified||sum.incomplete)?'<div class="note" style="margin-bottom:12px;color:var(--warn)"><b>Pendências de fechamento:</b> '+(sum.unclassified?fmtMin(sum.unclassified)+' ainda sem classificação. ':'')+(sum.incomplete?sum.incomplete+' dia(s) com ponto incompleto.':'')+'</div>':'');
   }else summary.innerHTML='<div class="card"><span class="status warn">Banco não configurado para este período</span></div>';
-  document.getElementById('deficitClassificationList').innerHTML=agreement?deficitListHtml(e,bankMonth):'<div class="small muted">Configure o acordo para usar a classificação de compensação. Faltas e justificativas serão integradas ao fechamento mensal.</div>';
+  document.getElementById('deficitClassificationList').innerHTML=deficitListHtml(e,bankMonth);
   document.getElementById('hourBankLedger').innerHTML=agreement?ledgerHtml(e,b.to):'<div class="small muted">Banco não configurado.</div>';
   document.getElementById('hourBankTests').innerHTML=runTestsHtml();
 
