@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg">
-<title>PontoCasa v0.12</title>
+<title>PontoCasa v0.12.1</title>
 <style>
 :root{--bg:#f6f7f8;--card:#fff;--text:#14213d;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--good:#15803d;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -187,6 +187,7 @@ let st=JSON.parse(localStorage.getItem(KEY)||'null')||{employees:[{id:'e1',name:
 st.calendarEvents=st.calendarEvents||[];
 st.hourBankAgreements=st.hourBankAgreements||[];
 st.hourBankCompensations=st.hourBankCompensations||[];
+st.worktimeDeficitTreatments=st.worktimeDeficitTreatments||[];
 let photo=null,loc=null,editing='e1',employeeSnapshot=null,scheduleSnapshot=null,workSnapshot=null,reportRange=localStorage.getItem(SIM_MODE_KEY)==='1'?{from:'2026-08-01',to:'2026-09-30'}:{from:null,to:null};
 let calendarMonth=localStorage.getItem(SIM_MODE_KEY)==='1'?'2026-08':new Date().toLocaleDateString('en-CA').slice(0,7),calendarEmployeeId=null;
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(st)),uid=()=>crypto.randomUUID?crypto.randomUUID():'id'+Date.now()+Math.random(),fmtD=s=>new Date(s).toLocaleDateString('pt-BR');
